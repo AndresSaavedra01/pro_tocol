@@ -7,8 +7,8 @@ class Profile {
 
 
   Profile({
-  required this.name,
-  required this.avatarPath,
+    required this.name,
+    required this.avatarPath,
   }) : createdAt = DateTime.now();
 
 

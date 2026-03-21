@@ -1,8 +1,8 @@
 
 
-import 'package:pro_tocol/entity/BaseConnection.dart';
+import 'package:pro_tocol/entity/ShhConnection.dart';
 
-class TempSession extends Baseconnection {
+class TempSession extends ShhConnection {
   final DateTime startedAt;
   final String connectionId; // Un ID único para identificar la pestaña abierta
 

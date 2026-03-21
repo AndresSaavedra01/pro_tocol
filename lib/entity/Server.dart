@@ -1,7 +1,7 @@
 
-import 'package:pro_tocol/entity/BaseConnection.dart';
+import 'package:pro_tocol/entity/ShhConnection.dart';
 
-class server extends Baseconnection {
+class server extends ShhConnection {
 
   String alias;
   server({
