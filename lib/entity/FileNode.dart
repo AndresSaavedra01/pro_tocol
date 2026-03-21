@@ -16,10 +16,8 @@ class FileNode {
     required this.lastModified,
   });
 
-  // El Dev A usará esto para decidir qué icono mostrar
   bool get isDirectory => type == FileType.directory;
 
-  // Lógica para que el Dev C asigne el tipo según la extensión
   static FileType parseType(String fileName, bool isDir) {
     if (isDir) return FileType.directory;
 

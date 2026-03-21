@@ -1,21 +1,20 @@
 
-import 'package:pro_tocol/entity/ShhConnection.dart';
+import 'package:isar/isar.dart';
 
-class server extends ShhConnection {
+import 'ShhConnection.dart';
 
+part 'Server.g.dart';
+
+@collection
+class Server extends ShhConnection {
+  Id id = Isar.autoIncrement;
   String alias;
-  server({
+
+  Server({
     required this.alias,
-    required String user,
     required String ip,
-    required String pass
-  }) : super(ip, user, pass) {
-    saveInDataBase();
-  }
-
-  void saveInDataBase() {
-    print("Guardando $alias en la memoria local...");
-  }
-
+    required String user,
+    required String pass,
+  }) : super(ip, user, pass); // Pasamos los datos al padre
 }
 
