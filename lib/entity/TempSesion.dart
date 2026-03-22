@@ -1,17 +1,24 @@
 
 
-import 'package:pro_tocol/entity/SHHConnection.dart';
+import 'package:pro_tocol/entity/GeneralConfig.dart';
 
-class TempSession extends SHHConnection {
-  final DateTime startedAt;
-  final String connectionId; // Un ID único para identificar la pestaña abierta
+class TempSession implements GeneralConfig {
+  @override
+  final String host;
+  @override
+  final String username;
+  @override
+  final int port;
+  @override
+  final String? password;
+  @override
+  final String? privateKey;
 
   TempSession({
-    required String ip,
-    required String user,
-    required int port,
-    required String pass,
-    required this.connectionId,
-  }) : startedAt = DateTime.now(),
-        super(ip, user, port, pass);
+    required this.host,
+    required this.username,
+    this.port = 22,
+    required this.password,
+    this.privateKey
+  });
 }

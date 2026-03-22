@@ -2,7 +2,7 @@
 class FileNode {
   final String name;
   final String path;
-  final FileType type; // Sustituye al booleano
+  final FileType type;
   final int sizeInBytes;
   final String permissions;
   final DateTime lastModified;

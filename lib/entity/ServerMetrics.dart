@@ -1,17 +1,29 @@
 
 class ServerMetrics {
-  final double cpuUsage;      // Porcentaje (0.0 a 100.0)
-  final double ramUsedMB;     // Megabytes usados
-  final double ramTotalMB;    // Megabytes totales
-  final String uptime;        // Tiempo encendido (ej: "2 days, 4 hours")
-  final DateTime timestamp;   // Cuándo se tomó la métrica
+  final double cpuUsage;
+  final int usedRam;
+  final int totalRam;
+  final String diskUsage;
+  final DateTime timestamp;
 
   ServerMetrics({
     required this.cpuUsage,
-    required this.ramUsedMB,
-    required this.ramTotalMB,
-    required this.uptime,
-  }) : timestamp = DateTime.now();
+    required this.usedRam,
+    required this.totalRam,
+    required this.diskUsage,
+    required this.timestamp,
+  });
 
-  double get ramPercentage => (ramUsedMB / ramTotalMB) * 100;
+  // Factory para procesar el texto plano que devuelve Linux
+  factory ServerMetrics.fromRawOutput(String raw) {
+    final lines = raw.split('\n');
+    // Lógica de parsing basada en los comandos de 'fetchMetrics'
+    return ServerMetrics(
+      cpuUsage: double.tryParse(lines[0]) ?? 0.0,
+      usedRam: int.tryParse(lines[1].split(' ')[0]) ?? 0,
+      totalRam: int.tryParse(lines[1].split(' ')[1]) ?? 0,
+      diskUsage: lines[2].trim(),
+      timestamp: DateTime.now(),
+    );
+  }
 }

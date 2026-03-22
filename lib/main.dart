@@ -1,7 +1,9 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:dartssh2/dartssh2.dart';
-import 'package:xterm/xterm.dart';
+import 'package:pro_tocol/entity//SSHService.dart';
+import 'package:pro_tocol/entity/DataBaseEntities.dart';
+import 'package:pro_tocol/entity/GeneralConfig.dart';
+import 'package:pro_tocol/entity/FileNode.dart';
+import 'package:pro_tocol/entity/TempSesion.dart';
 
 void main() {
   runApp(const MyApp());
@@ -13,203 +15,136 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Cliente SSH',
-      theme: ThemeData(
-        primarySwatch: Colors.blue,
-        brightness: Brightness.dark,
-      ),
-      home: const LoginScreen(),
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData.dark(useMaterial3: true),
+      home: const SSHTestScreen(),
     );
   }
 }
 
-// --- PANTALLA DE FORMULARIO ---
-class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
+class SSHTestScreen extends StatefulWidget {
+  const SSHTestScreen({super.key});
 
   @override
-  State<LoginScreen> createState() => _LoginScreenState();
+  State<SSHTestScreen> createState() => _SSHTestScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> {
-  final _ipController = TextEditingController();
-  final _userController = TextEditingController();
-  final _passwordController = TextEditingController();
+class _SSHTestScreenState extends State<SSHTestScreen> {
+  // Instancia de tu servicio
+  final SSHService _sshService = SSHService();
 
-  void _conectar() {
-    if (_ipController.text.isEmpty ||
-        _userController.text.isEmpty ||
-        _passwordController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Por favor, llena todos los campos')),
-      );
-      return;
-    }
+  // Controladores de texto para el formulario
+  final _hostController = TextEditingController(text: '192.168.1.10');
+  final _userController = TextEditingController(text: 'root');
+  final _passController = TextEditingController();
 
-    // Navegar a la pantalla de la terminal pasando los datos
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => TerminalScreen(
-          ip: _ipController.text,
-          username: _userController.text,
-          password: _passwordController.text,
-        ),
-      ),
+  bool _isLoading = false;
+  List<FileNode> _files = [];
+  String _terminalOutput = "Consola lista...";
+
+  // Función para conectar
+  Future<void> _handleConnect() async {
+    setState(() => _isLoading = true);
+
+    final config = TempSession(
+      host: _hostController.text,
+      username: _userController.text,
+      port: 22,
+      password: _passController.text,
     );
+
+    final success = await _sshService.connect(config);
+
+    if (success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('¡Conectado exitosamente!')),
+      );
+      _loadFiles();
+    } else {
+      showDialog(
+        context: context,
+        builder: (c) => const AlertDialog(title: Text("Error de conexión")),
+      );
+    }
+    setState(() => _isLoading = false);
+  }
+
+  // Probar SFTP internamente
+  Future<void> _loadFiles() async {
+    if (_sshService.sftp != null) {
+      final list = await _sshService.sftp!.listDirectory('/');
+      setState(() => _files = list);
+    }
+  }
+
+  // Probar un comando rápido (Botón)
+  Future<void> _runUptime() async {
+    final res = await _sshService.runSingleCommand('uptime -p');
+    setState(() => _terminalOutput = res);
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Conexión SSH')),
+      appBar: AppBar(title: const Text('SSH Service Tester')),
       body: Padding(
-        padding: const EdgeInsets.all(24.0),
+        padding: const EdgeInsets.all(16.0),
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            TextField(
-              controller: _ipController,
-              decoration: const InputDecoration(
-                labelText: 'Dirección IP',
-                prefixIcon: Icon(Icons.computer),
+            // --- FORMULARIO ---
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: Column(
+                  children: [
+                    TextField(controller: _hostController, decoration: const InputDecoration(labelText: 'Host IP')),
+                    TextField(controller: _userController, decoration: const InputDecoration(labelText: 'Usuario')),
+                    TextField(controller: _passController, decoration: const InputDecoration(labelText: 'Password'), obscureText: true),
+                    const SizedBox(height: 10),
+                    ElevatedButton(
+                      onPressed: _isLoading ? null : _handleConnect,
+                      child: _isLoading ? const CircularProgressIndicator() : const Text('Conectar'),
+                    ),
+                  ],
+                ),
               ),
-              keyboardType: TextInputType.numberWithOptions(decimal: true),
             ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _userController,
-              decoration: const InputDecoration(
-                labelText: 'Usuario',
-                prefixIcon: Icon(Icons.person),
-              ),
+
+            const Divider(),
+
+            // --- ACCIONES Y SALIDA ---
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                ElevatedButton(onPressed: _sshService.isConnected ? _runUptime : null, child: const Text('Get Uptime')),
+                ElevatedButton(onPressed: _sshService.isConnected ? _loadFiles : null, child: const Text('Refresh Files')),
+              ],
             ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _passwordController,
-              decoration: const InputDecoration(
-                labelText: 'Contraseña',
-                prefixIcon: Icon(Icons.lock),
-              ),
-              obscureText: true,
-            ),
-            const SizedBox(height: 32),
-            SizedBox(
+
+            Container(
+              margin: const EdgeInsets.symmetric(vertical: 10),
+              padding: const EdgeInsets.all(8),
               width: double.infinity,
-              height: 50,
-              child: ElevatedButton(
-                onPressed: _conectar,
-                child: const Text('Conectar', style: TextStyle(fontSize: 18)),
+              color: Colors.black,
+              child: Text(_terminalOutput, style: const TextStyle(color: Colors.greenAccent, fontFamily: 'monospace')),
+            ),
+
+            // --- LISTA DE ARCHIVOS (SFTP) ---
+            Expanded(
+              child: ListView.builder(
+                itemCount: _files.length,
+                itemBuilder: (context, index) {
+                  final file = _files[index];
+                  return ListTile(
+                    leading: Icon(file.isDirectory ? Icons.folder : Icons.insert_drive_file),
+                    title: Text(file.name),
+                    subtitle: Text('${file.type.name} - ${file.sizeInBytes} bytes'),
+                  );
+                },
               ),
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-// --- PANTALLA DE LA TERMINAL ---
-class TerminalScreen extends StatefulWidget {
-  final String ip;
-  final String username;
-  final String password;
-
-  const TerminalScreen({
-    super.key,
-    required this.ip,
-    required this.username,
-    required this.password,
-  });
-
-  @override
-  State<TerminalScreen> createState() => _TerminalScreenState();
-}
-
-class _TerminalScreenState extends State<TerminalScreen> {
-  late final Terminal terminal;
-  SSHClient? client;
-  SSHSession? session;
-  bool _isConnecting = true;
-
-  @override
-  void initState() {
-    super.initState();
-    terminal = Terminal();
-    _iniciarSSH();
-  }
-
-  Future<void> _iniciarSSH() async {
-    try {
-      // 1. Establecer la conexión por socket
-      final socket = await SSHSocket.connect(widget.ip, 22);
-
-      // 2. Autenticar el cliente SSH
-      client = SSHClient(
-        socket,
-        username: widget.username,
-        onPasswordRequest: () => widget.password,
-      );
-
-      // 3. Solicitar una shell (terminal interactiva)
-      session = await client!.shell(
-        pty: SSHPtyConfig(
-            width: terminal.viewWidth,
-            height: terminal.viewHeight
-        ),
-      );
-
-      setState(() {
-        _isConnecting = false;
-      });
-
-      // 4. Conectar la salida (stdout/stderr) del servidor a nuestra terminal visual
-      session!.stdout
-          .cast<List<int>>()
-          .transform(const Utf8Decoder())
-          .listen(terminal.write);
-
-      session!.stderr
-          .cast<List<int>>()
-          .transform(const Utf8Decoder())
-          .listen(terminal.write);
-
-      // 5. Conectar nuestras teclas (inputs) al servidor SSH
-      terminal.onOutput = (data) {
-        session!.write(utf8.encode(data));
-      };
-
-      // Si la sesión termina desde el lado del servidor, cerramos la pantalla
-      await session!.done;
-      if (mounted) {
-        Navigator.pop(context);
-      }
-    } catch (e) {
-      setState(() {
-        _isConnecting = false;
-      });
-      terminal.write('\r\n\x1B[31mError de conexión: $e\x1B[0m\r\n');
-    }
-  }
-
-  @override
-  void dispose() {
-    client?.close(); // Siempre cerramos el cliente al salir
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text('${widget.username}@${widget.ip}'),
-        backgroundColor: Colors.black,
-      ),
-      backgroundColor: Colors.black,
-      body: SafeArea(
-        child: _isConnecting
-            ? const Center(child: CircularProgressIndicator())
-            : TerminalView(terminal),
       ),
     );
   }
