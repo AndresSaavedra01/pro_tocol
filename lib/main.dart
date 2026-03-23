@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:pro_tocol/entity//SSHService.dart';
-import 'package:pro_tocol/entity/DataBaseEntities.dart';
-import 'package:pro_tocol/entity/GeneralConfig.dart';
 import 'package:pro_tocol/entity/FileNode.dart';
 import 'package:pro_tocol/entity/TempSesion.dart';
 
