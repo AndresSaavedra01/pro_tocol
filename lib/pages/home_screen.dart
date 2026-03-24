@@ -1,5 +1,8 @@
+// Archivo: lib/pages/home_screen.dart
 import 'package:flutter/material.dart';
 import '../widgets/connection_dialog.dart';
+import 'server_screen.dart';
+
 class HomeScreen extends StatelessWidget {
   final String profileName;
 
@@ -126,7 +129,26 @@ class HomeScreen extends StatelessWidget {
                 ),
               );
             }),
-            _buildSidebarItem('Servidor Principal', true, false, 'Activo'),
+            
+            // --- AQUÍ CONECTAMOS EL CLIC PARA ABRIR EL SERVIDOR ---
+            _buildSidebarItem(
+              title: 'Servidor Principal',
+              isActive: true,
+              isSession: false,
+              subtitle: 'Activo',
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const ServerScreen(
+                      serverName: 'Servidor Principal',
+                      connectionInfo: 'root@192.168.1.100',
+                      isTemporarySession: false, // FALSE: Muestra las 3 pestañas
+                    ),
+                  ),
+                );
+              },
+            ),
 
             const SizedBox(height: 20),
             const Divider(color: Colors.white10, height: 1),
@@ -145,7 +167,26 @@ class HomeScreen extends StatelessWidget {
                 ),
               );
             }),
-            _buildSidebarItem('Sesión de Prueba', true, true, '2h 30m'),
+
+            // --- AQUÍ CONECTAMOS EL CLIC PARA ABRIR LA SESIÓN TEMPORAL ---
+            _buildSidebarItem(
+              title: 'Sesión de Prueba',
+              isActive: true,
+              isSession: true,
+              subtitle: '2h 30m',
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const ServerScreen(
+                      serverName: 'Sesión de Prueba',
+                      connectionInfo: 'user@10.0.0.5',
+                      isTemporarySession: true, // TRUE: Oculta pestañas, va directo a Terminal
+                    ),
+                  ),
+                );
+              },
+            ),
           ],
         ),
       ),
@@ -174,7 +215,14 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildSidebarItem(String title, bool isActive, bool isSession, String subtitle) {
+  // --- MODIFICAMOS LA FIRMA PARA ACEPTAR EL onTap ---
+  Widget _buildSidebarItem({
+    required String title,
+    required bool isActive,
+    required bool isSession,
+    required String subtitle,
+    required VoidCallback onTap, 
+  }) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       child: Container(
@@ -183,6 +231,7 @@ class HomeScreen extends StatelessWidget {
           borderRadius: BorderRadius.circular(12),
         ),
         child: ListTile(
+          onTap: onTap, // Conectamos el toque a toda la fila
           leading: isSession 
               ? null 
               : CircleAvatar(radius: 4, backgroundColor: isActive ? Colors.greenAccent : Colors.white24),
