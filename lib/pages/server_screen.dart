@@ -85,17 +85,9 @@ class _ServerScreenState extends State<ServerScreen> {
       child: Scaffold(
         key: _scaffoldKey,
         backgroundColor: const Color(0xFF0F1319),
-        drawer: CustomSidebar(
-          currentServer: widget.serverName,
-          onNavigate: _handleNavigation,
-        ),
         appBar: AppBar(
           backgroundColor: const Color(0xFF1B2430),
           elevation: 0,
-          leading: IconButton(
-            icon: const Icon(Icons.menu, color: Colors.white),
-            onPressed: () => _scaffoldKey.currentState?.openDrawer(),
-          ),
           title: Column(
             children: [
               Text(widget.serverName, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
@@ -103,12 +95,6 @@ class _ServerScreenState extends State<ServerScreen> {
             ],
           ),
           centerTitle: true,
-          actions: [
-            IconButton(
-              icon: const Icon(Icons.arrow_back, color: Colors.white),
-              onPressed: () => Navigator.pop(context),
-            ),
-          ],
           bottom: widget.isTemporarySession
               ? null
               : const TabBar(
