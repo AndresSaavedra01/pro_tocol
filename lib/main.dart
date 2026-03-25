@@ -1,15 +1,47 @@
 import 'package:flutter/material.dart';
-import 'package:pro_tocol/entity//SSHService.dart';
-import 'package:pro_tocol/entity/FileNode.dart';
-import 'package:pro_tocol/entity/TempSession.dart';
+import 'package:isar/isar.dart';
+import 'package:path_provider/path_provider.dart';
+
+// Importaciones de tus entidades y controladores
+import 'package:pro_tocol/entity/DataBaseEntities.dart';
+import 'package:pro_tocol/presentation/controllers/ProfileController.dart';
+import 'package:pro_tocol/presentation/controllers/NavigationController.dart';
 import 'package:pro_tocol/pages/profile_screen.dart';
 
-void main() {
-  runApp(const MyApp());
+void main() async {
+  // 1. Aseguramos que los bindings de Flutter estén listos para procesos asíncronos
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // 2. Configuramos la ruta de almacenamiento para Isar
+  final dir = await getApplicationDocumentsDirectory();
+
+  // 3. Abrimos la base de datos con los esquemas de Perfil y Configuración de Servidor
+  final isar = await Isar.open(
+    [ProfileSchema, ServerConfigSchema],
+    directory: dir.path,
+  );
+
+  // 4. Instanciamos los controladores (nuestro "cerebro" global)
+  final profileController = ProfileController(isar: isar);
+  final navigationController = NavigationController();
+
+  // 5. Corremos la App pasando los controladores por constructor
+  runApp(MyApp(
+    profileController: profileController,
+    navigationController: navigationController,
+  ));
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+  final ProfileController profileController;
+  final NavigationController navigationController;
+
+  // El constructor ya no es 'const' porque recibe objetos que se crean en tiempo de ejecución
+  const MyApp({
+    super.key,
+    required this.profileController,
+    required this.navigationController,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -20,7 +52,11 @@ class MyApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF8B63FF)),
         useMaterial3: true,
       ),
-      home: const ProfileScreen(),
+      // 6. Inyectamos los controladores en la pantalla de entrada
+      home: ProfileScreen(
+        controller: profileController,
+        navigationController: navigationController,
+      ),
     );
   }
 }

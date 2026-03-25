@@ -1,24 +1,34 @@
 import 'package:flutter/material.dart';
-import 'home_screen.dart'; 
+import 'package:pro_tocol/presentation/controllers/NavigationController.dart';
+import 'home_screen.dart';
+// Importamos las entidades y el controlador
+import 'package:pro_tocol/entity/DataBaseEntities.dart';
+import 'package:pro_tocol/presentation/controllers/ProfileController.dart';
 
 class ProfileScreen extends StatefulWidget {
-  const ProfileScreen({super.key});
+  // 1. Pedimos el controlador por constructor
+  final ProfileController controller;
+
+  const ProfileScreen({super.key, required this.controller, required NavigationController navigationController});
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  final List<String> _perfiles = [];
+  // Ya no necesitamos la lista _perfiles, usamos la del controlador
   final TextEditingController _nameController = TextEditingController();
 
-  void _addProfile() {
-    if (_nameController.text.isNotEmpty && _perfiles.length < 4) {
-      setState(() {
-        _perfiles.add(_nameController.text);
-      });
+  // 2. Función para agregar perfil usando el controlador y la BD
+  Future<void> _addProfile() async {
+    if (_nameController.text.isNotEmpty && widget.controller.allProfiles.length < 4) {
+      // Llamamos al método que guarda en Isar
+      await widget.controller.createProfile(_nameController.text);
+
       _nameController.clear();
-      Navigator.pop(context);
+      if (mounted) {
+        Navigator.pop(context); // Cerramos el diálogo
+      }
     }
   }
 
@@ -28,80 +38,88 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     return Scaffold(
       body: Container(
-
         decoration: const BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              Color(0xFF1B2430), 
-              Color(0xFF000000), 
+              Color(0xFF1B2430),
+              Color(0xFF000000),
             ],
           ),
         ),
         child: SafeArea(
           child: SizedBox(
             width: double.infinity,
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Text(
-                  '¿ Quien esta ?',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 32,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                const Text(
-                  'Selecciona o crea tu perfil',
-                  style: TextStyle(
-                    color: Colors.white70,
-                    fontSize: 16,
-                  ),
-                ),
-                const SizedBox(height: 40),
-                
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: Wrap(
-                    spacing: 20,
-                    runSpacing: 20,
-                    alignment: WrapAlignment.center,
-                    children: [
-                      // Perfiles creados
-                      ..._perfiles.map((nombre) => _buildProfileCard(nombre, cardWidth)),
+            // 3. El ListenableBuilder escucha al controlador y redibuja cuando hay cambios
+            child: ListenableBuilder(
+                listenable: widget.controller,
+                builder: (context, child) {
+                  // Obtenemos los perfiles reales de la base de datos
+                  final perfilesExistentes = widget.controller.allProfiles;
 
-                      // Botón Nuevo perfil (Solo si hay menos de 4)
-                      if (_perfiles.length < 4)
-                        GestureDetector(
-                          onTap: () => _showCreateProfileDialog(context),
-                          child: Container(
-                            width: cardWidth,
-                            height: 140,
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF282A36).withOpacity(0.5),
-                              borderRadius: BorderRadius.circular(16),
-                              border: Border.all(color: Colors.white10),
-                            ),
-                            child: const Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(Icons.add, color: Colors.white54, size: 48),
-                                SizedBox(height: 8),
-                                Text(
-                                  'Nuevo perfil',
-                                  style: TextStyle(color: Colors.white, fontSize: 14),
-                                ),
-                              ],
-                            ),
-                          ),
+                  return Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Text(
+                        '¿ Quien esta ?',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 32,
+                          fontWeight: FontWeight.bold,
                         ),
+                      ),
+                      const SizedBox(height: 12),
+                      const Text(
+                        'Selecciona o crea tu perfil',
+                        style: TextStyle(
+                          color: Colors.white70,
+                          fontSize: 16,
+                        ),
+                      ),
+                      const SizedBox(height: 40),
+
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        child: Wrap(
+                          spacing: 20,
+                          runSpacing: 20,
+                          alignment: WrapAlignment.center,
+                          children: [
+                            // 4. Mapeamos los perfiles reales (objetos Profile)
+                            ...perfilesExistentes.map((perfil) => _buildProfileCard(perfil, cardWidth)),
+
+                            // Botón Nuevo perfil (Solo si hay menos de 4 en la BD)
+                            if (perfilesExistentes.length < 4)
+                              GestureDetector(
+                                onTap: () => _showCreateProfileDialog(context),
+                                child: Container(
+                                  width: cardWidth,
+                                  height: 140,
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF282A36).withOpacity(0.5),
+                                    borderRadius: BorderRadius.circular(16),
+                                    border: Border.all(color: Colors.white10),
+                                  ),
+                                  child: const Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(Icons.add, color: Colors.white54, size: 48),
+                                      SizedBox(height: 8),
+                                      Text(
+                                        'Nuevo perfil',
+                                        style: TextStyle(color: Colors.white, fontSize: 14),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
                     ],
-                  ),
-                ),
-              ],
+                  );
+                }
             ),
           ),
         ),
@@ -109,14 +127,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildProfileCard(String name, double width) {
+  // 5. Ajustamos para que reciba el objeto Profile completo
+  Widget _buildProfileCard(Profile perfil, double width) {
     return GestureDetector(
       onTap: () {
-        // Navegamos a la pantalla de Inicio pasándole el nombre del perfil
+        // Marcamos este perfil como activo en el controlador antes de ir al Home
+        widget.controller.setActiveProfile(perfil);
+
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) => HomeScreen(profileName: name),
+            builder: (context) => HomeScreen(profileName: perfil.profileName),
           ),
         );
       },
@@ -124,11 +145,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
         width: width,
         height: 140,
         decoration: BoxDecoration(
-          // Quitamos los 'const' que daban error con el withOpacity
-          color: Color(0xFF8B63FF).withOpacity(0.15),
+          color: const Color(0xFF8B63FF).withOpacity(0.15),
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: Color(0xFF8B63FF).withOpacity(0.5),
+            color: const Color(0xFF8B63FF).withOpacity(0.5),
           ),
         ),
         child: Column(
@@ -141,11 +161,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
             const SizedBox(height: 12),
             Text(
-              name,
+              perfil.profileName,
               style: const TextStyle(
-                color: Colors.white, 
-                fontWeight: FontWeight.bold,
-                fontSize: 16
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16
               ),
               overflow: TextOverflow.ellipsis,
             ),
