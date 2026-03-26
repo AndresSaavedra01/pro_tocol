@@ -7,7 +7,8 @@ plugins {
 android {
     namespace = "com.pro_team.pro_tocol"
     compileSdk = flutter.compileSdkVersion
-    ndkVersion = flutter.ndkVersion
+    //ndkVersion = flutter.ndkVersion
+    ndkVersion = "28.2.13676358"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -48,4 +49,7 @@ android {
 
 flutter {
     source = "../.."
+}
+dependencies {
+    implementation("com.jcraft:jsch:0.1.55")
 }
