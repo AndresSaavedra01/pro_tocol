@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:pro_tocol/entity/ServerModel.dart';
-import 'package:pro_tocol/entity/TempSession.dart';
+import 'package:pro_tocol/model/entities/ServerModel.dart';
+import 'package:pro_tocol/model/entities/TempSession.dart';
 
 // Definimos los tres estados posibles de la pantalla principal
 enum ViewType { home, serverView, tempSessionView }

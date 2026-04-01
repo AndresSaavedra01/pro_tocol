@@ -1,13 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:isar/isar.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:pro_tocol/model/entities/DataBaseEntities.dart';
+import 'package:pro_tocol/view/pages/profile_screen.dart';
+import 'package:pro_tocol/controller/NavigationController.dart';
+import 'package:pro_tocol/controller//SSHOrchestrator.dart';
+import 'package:pro_tocol/controller/ProfileController.dart';
 
-// Importaciones de tus entidades y controladores
-import 'package:pro_tocol/entity/DataBaseEntities.dart';
-import 'package:pro_tocol/presentation/controllers/ProfileController.dart';
-import 'package:pro_tocol/presentation/controllers/NavigationController.dart';
-import 'package:pro_tocol/pages/profile_screen.dart';
-import 'package:pro_tocol/presentation/controllers/SSHOrchestrator.dart';
 
 void main() async {
   // 1. Aseguramos que los bindings de Flutter estén listos para procesos asíncronos

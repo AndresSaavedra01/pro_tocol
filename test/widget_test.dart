@@ -7,7 +7,7 @@
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:pro_tocol/presentation/controllers/NavigationController.dart';
+import 'package:pro_tocol/controller//NavigationController.dart';
 
 void main() {
   testWidgets('App initialization smoke test', (WidgetTester tester) async {

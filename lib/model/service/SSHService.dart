@@ -1,10 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:dartssh2/dartssh2.dart';
-import 'package:pro_tocol/entity/GeneralConfig.dart';
+import 'package:pro_tocol/model/entities/GeneralConfig.dart';
 
 import 'SFTPService.dart';
-import 'ServerMetrics.dart';
+import '../entities/ServerMetrics.dart';
 
 class SSHService {
   SSHClient? _client;

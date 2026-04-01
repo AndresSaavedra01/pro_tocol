@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:isar/isar.dart';
-import 'package:pro_tocol/entity/DataBaseEntities.dart';
-import 'package:pro_tocol/entity/ServerModel.dart';
+import 'package:pro_tocol/model/entities/DataBaseEntities.dart';
+import 'package:pro_tocol/model/entities//ServerModel.dart';
 
-import '../../entity/TempSession.dart';
+import '../model/entities/TempSession.dart';
 
 class ProfileController extends ChangeNotifier {
   final Isar isar;

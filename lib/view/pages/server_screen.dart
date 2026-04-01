@@ -4,10 +4,9 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:xterm/xterm.dart';
 import 'package:fl_chart/fl_chart.dart';
-import 'package:pro_tocol/presentation/controllers/SSHOrchestrator.dart';
-import 'package:pro_tocol/entity/SSHService.dart';
-import '../entity/FileNode.dart';
-import '../entity/ServerMetrics.dart';
+import 'package:pro_tocol/controller//SSHOrchestrator.dart';
+import 'package:pro_tocol/model/service/SSHService.dart';
+import '../../model/entities/FileNode.dart';
 
 class ServerScreen extends StatefulWidget {
   final String serverName;

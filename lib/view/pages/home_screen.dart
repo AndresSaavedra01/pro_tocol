@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:pro_tocol/presentation/controllers/SSHOrchestrator.dart';
-import '../widgets/connection_dialog.dart';
+import '../components/connection_dialog.dart';
 import 'server_screen.dart';
-import 'package:pro_tocol/presentation/controllers/NavigationController.dart';
-import 'package:pro_tocol/presentation/controllers/ProfileController.dart';
-import 'package:pro_tocol/entity/DataBaseEntities.dart';
-import 'package:pro_tocol/entity/TempSession.dart';
+import 'package:pro_tocol/controller/NavigationController.dart';
+import 'package:pro_tocol/controller//SSHOrchestrator.dart';
+import 'package:pro_tocol/controller/ProfileController.dart';
+import 'package:pro_tocol/model/entities/DataBaseEntities.dart';
+import 'package:pro_tocol/model/entities/TempSession.dart';
 
 class HomeScreen extends StatelessWidget {
   final String profileName;
