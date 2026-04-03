@@ -1,6 +1,6 @@
 
 
-import 'package:pro_tocol/entity/GeneralConfig.dart';
+import 'package:pro_tocol/model/entities/GeneralConfig.dart';
 
 class TempSession implements GeneralConfig {
   @override

@@ -1,6 +1,6 @@
 
 import 'package:dartssh2/dartssh2.dart';
-import 'package:pro_tocol/entity/FileNode.dart';
+import 'package:pro_tocol/model/entities/FileNode.dart';
 
 class SFTPService {
   final SSHClient _client;

@@ -1,7 +1,7 @@
 
 
-import 'package:pro_tocol/entity/DataBaseEntities.dart';
-import 'package:pro_tocol/entity/SSHService.dart';
+import 'package:pro_tocol/model/entities/DataBaseEntities.dart';
+import 'package:pro_tocol/model/service/SSHService.dart';
 
 
 class ServerModel {
