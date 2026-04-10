@@ -1,8 +1,6 @@
-
 import 'package:flutter/material.dart';
 import 'package:isar/isar.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:pro_tocol/controller/TempSessionController.dart';
 
 // --- Entidades ---
 import 'package:pro_tocol/model/entities/DataBaseEntities.dart';
@@ -14,77 +12,62 @@ import 'package:pro_tocol/model/daos/ServerConfigDAO.dart';
 // --- Repositorios ---
 import 'package:pro_tocol/model/repositories/ProfileRepository.dart';
 import 'package:pro_tocol/model/repositories/ServerRepository.dart';
+import 'package:pro_tocol/model/repositories/TempSessionRepository.dart';
 
 // --- Controladores ---
 import 'package:pro_tocol/controller/ProfileController.dart';
 import 'package:pro_tocol/controller/ServerController.dart';
-import 'package:pro_tocol/model/repositories/TempSessionRepository.dart';
-import 'package:pro_tocol/view/pages/ProfilePage.dart';
+import 'package:pro_tocol/controller/TempSessionController.dart';
 
-// --- Vistas ---
+// --- Enrutador ---
+import 'package:pro_tocol/view/router/AppRouter.dart';
 
 
 void main() async {
-  // 1. Asegurar que los bindings de Flutter estén listos antes de ejecutar código asíncrono
   WidgetsFlutterBinding.ensureInitialized();
 
-  // 2. Inicializar Isar Database
-  // Necesitamos una ruta segura en el dispositivo para guardar los datos
   final dir = await getApplicationDocumentsDirectory();
-
   final isar = await Isar.open(
-    [ProfileSchema, ServerConfigSchema], // Esquemas generados por build_runner
+    [ProfileSchema, ServerConfigSchema],
     directory: dir.path,
   );
 
-  // 3. Inyección de Dependencias (Manual)
-  // Construimos las capas de abajo hacia arriba
-
-  // a. Capa de Acceso a Datos
   final profileDAO = ProfileDAO(isar);
   final serverConfigDAO = ServerConfigDAO(isar);
 
-  // b. Capa de Repositorios
   final profileRepository = ProfileRepository(profileDAO);
   final serverRepository = ServerRepository(serverConfigDAO);
   final tempSessionRepository = TempSessionRepository();
 
-  // c. Capa de Controladores (Reglas de negocio y estado en memoria)
   final profileController = ProfileController(profileRepository);
   final serverController = ServerController(serverRepository, profileRepository);
-  final tempSessionController =  TempSessionController(tempSessionRepository);
+  final tempSessionController = TempSessionController(tempSessionRepository);
 
-  // 4. Arrancar la aplicación inyectando los controladores en la raíz
-  runApp(MyApp(
+  // Instanciamos nuestro enrutador central
+  final appRouter = AppRouter(
     profileController: profileController,
     serverController: serverController,
     tempSessionController: tempSessionController,
-  ));
+  );
+
+  runApp(MyApp(appRouter: appRouter));
 }
 
 class MyApp extends StatelessWidget {
-  final ProfileController profileController;
-  final ServerController serverController;
-  final TempSessionController tempSessionController;
+  final AppRouter appRouter;
 
   const MyApp({
-    Key? key,
-    required this.profileController,
-    required this.serverController,
-    required this.tempSessionController
-  }) : super(key: key);
+    super.key,
+    required this.appRouter,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
+    // Usamos MaterialApp.router
+    return MaterialApp.router(
       title: 'Pro-Tocol SSH',
       debugShowCheckedModeBanner: false,
-      // Iniciamos directamente en la página de perfiles
-      home: ProfilePage(
-        profileController: profileController,
-        serverController: serverController,
-        tempSessionController: tempSessionController,
-      ),
+      routerConfig: appRouter.router,
     );
   }
 }

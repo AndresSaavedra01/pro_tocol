@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:pro_tocol/controller/TempSessionController.dart';
 import 'package:pro_tocol/model/entities/DataBaseEntities.dart';
 import 'package:pro_tocol/controller/ProfileController.dart';
 import 'package:pro_tocol/controller/ServerController.dart';
 
 import '../theme/AppColors.dart';
-import 'WorkspacePage.dart';
 
 class ProfilePage extends StatefulWidget {
   final ProfileController profileController;
@@ -53,7 +53,7 @@ class _ProfileScreenState extends State<ProfilePage> {
       await widget.profileController.createProfile(name);
       _nameController.clear();
 
-      if (mounted) Navigator.pop(context);
+      if (mounted) context.pop(); // REFACTORIZADO
       await _loadProfiles();
     }
   }
@@ -85,7 +85,7 @@ class _ProfileScreenState extends State<ProfilePage> {
                       child: TextButton(
                           onPressed: () {
                             _nameController.clear();
-                            Navigator.pop(context);
+                            context.pop(); // REFACTORIZADO
                           },
                           child: const Text('Cancelar', style: TextStyle(color: Colors.grey))
                       )
@@ -101,7 +101,7 @@ class _ProfileScreenState extends State<ProfilePage> {
                             await widget.profileController.updateProfile(perfil);
 
                             _nameController.clear();
-                            if (context.mounted) Navigator.pop(context);
+                            if (context.mounted) context.pop(); // REFACTORIZADO
 
                             await _loadProfiles();
                           }
@@ -128,13 +128,13 @@ class _ProfileScreenState extends State<ProfilePage> {
         content: Text('¿Seguro que deseas eliminar el perfil "${perfil.profileName}"? Se borrarán todos sus servidores guardados. Esta acción no se puede deshacer.', style: const TextStyle(color: AppColors.textSecondary)),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => context.pop(), // REFACTORIZADO
             child: const Text('Cancelar', style: TextStyle(color: AppColors.textMuted)),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
             onPressed: () async {
-              Navigator.pop(context);
+              context.pop(); // REFACTORIZADO
               await widget.profileController.deleteProfile(perfil.id);
               await _loadProfiles();
             },
@@ -188,30 +188,8 @@ class _ProfileScreenState extends State<ProfilePage> {
   Widget _buildProfileCard(Profile perfil, double width) {
     return GestureDetector(
       onTap: () {
-        Navigator.push(
-          context,
-          PageRouteBuilder(
-            transitionDuration: const Duration(milliseconds: 400),
-            pageBuilder: (context, animation, secondaryAnimation) => WorkspacePage(
-              profile: perfil,
-              profileController: widget.profileController,
-              serverController: widget.serverController,
-              tempSessionController: widget.tempSessionController,
-            ),
-            transitionsBuilder: (context, animation, secondaryAnimation, child) {
-              return FadeTransition(
-                opacity: animation,
-                child: SlideTransition(
-                  position: Tween<Offset>(
-                    begin: const Offset(0.0, 0.1), // Sube solo un 10% de la pantalla
-                    end: Offset.zero,
-                  ).animate(CurvedAnimation(parent: animation, curve: Curves.easeOut)),
-                  child: child,
-                ),
-              );
-            },
-          ),
-        );
+        // REFACTORIZADO: Navegamos empujando al stack de GoRouter
+        context.push('/workspace', extra: perfil);
       },
       child: Stack(
         children: [
@@ -324,7 +302,7 @@ class _ProfileScreenState extends State<ProfilePage> {
                 children: [
                   Expanded(
                       child: TextButton(
-                          onPressed: () => Navigator.pop(context),
+                          onPressed: () => context.pop(), // REFACTORIZADO
                           child: const Text('Cancelar', style: TextStyle(color: Colors.grey))
                       )
                   ),

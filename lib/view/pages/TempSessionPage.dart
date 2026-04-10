@@ -133,7 +133,6 @@ class _TempSessionPageState extends State<TempSessionPage> {
         ),
         centerTitle: true,
         elevation: 0,
-        // Al no haber pestañas (Tabs), no necesitamos la propiedad 'bottom'
       ),
       body: _buildTerminalView(),
     );
