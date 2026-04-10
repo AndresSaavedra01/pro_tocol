@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart'; // NUEVO: Importamos go_router
 
 import 'package:pro_tocol/controller/ProfileController.dart';
 import 'package:pro_tocol/controller/ServerController.dart';
 import 'package:pro_tocol/model/entities/DataBaseEntities.dart';
 
 import 'package:pro_tocol/view/components/connection_dialog.dart';
-import 'package:pro_tocol/view/components/SshErrorDisplay.dart';
 import 'package:pro_tocol/view/components/custom_sidebar.dart';
 
 import '../../controller/TempSessionController.dart';
@@ -20,14 +20,14 @@ class WorkspacePage extends StatefulWidget {
   final Profile profile;
   final ProfileController profileController;
   final ServerController serverController;
-  final TempSessionController tempSessionController; // <--- NUEVO
+  final TempSessionController tempSessionController;
 
   const WorkspacePage({
     super.key,
     required this.profile,
     required this.profileController,
     required this.serverController,
-    required this.tempSessionController, // <--- REQUERIDO
+    required this.tempSessionController,
   });
 
   @override
@@ -37,7 +37,7 @@ class WorkspacePage extends StatefulWidget {
 class _WorkspacePageState extends State<WorkspacePage> {
   ViewType _currentView = ViewType.home;
   ServerConfig? _selectedServer;
-  TempSessionConfig? _selectedTempSession; // <--- CAMBIO DE TIPO
+  TempSessionConfig? _selectedTempSession;
   final List<TempSessionConfig> _tempConfigs = [];
 
   @override
@@ -72,12 +72,11 @@ class _WorkspacePageState extends State<WorkspacePage> {
     } catch (e) {
       if (mounted) {
         _goHome();
-        Navigator.push(context, MaterialPageRoute(
-          builder: (context) => SshErrorDisplay(
-            errorMessage: e.toString(),
-            onRetry: () => Navigator.pop(context),
-          ),
-        ));
+        // REFACTORIZADO: Push manejado por GoRouter
+        context.push('/error', extra: {
+          'message': e.toString(),
+          'onRetry': () => context.pop(),
+        });
       }
     }
   }
@@ -90,7 +89,6 @@ class _WorkspacePageState extends State<WorkspacePage> {
     });
 
     try {
-      // Intentamos conectar usando el controlador de sesiones temporales
       await widget.tempSessionController.createAndConnect(
         host: config.host,
         username: config.username,
@@ -103,12 +101,11 @@ class _WorkspacePageState extends State<WorkspacePage> {
     } catch (e) {
       if (mounted) {
         _goHome();
-        Navigator.push(context, MaterialPageRoute(
-          builder: (context) => SshErrorDisplay(
-            errorMessage: e.toString(),
-            onRetry: () => Navigator.pop(context),
-          ),
-        ));
+        // REFACTORIZADO: Push manejado por GoRouter
+        context.push('/error', extra: {
+          'message': e.toString(),
+          'onRetry': () => context.pop(),
+        });
       }
     }
   }
@@ -126,7 +123,6 @@ class _WorkspacePageState extends State<WorkspacePage> {
         ).toList(),
 
         activeServer: _selectedServer,
-        // Para que el resaltado funcione con sesiones temporales:
         activeTempSession: _selectedTempSession != null
             ? (ServerConfig()..host = _selectedTempSession!.host..id = _selectedTempSession!.host.hashCode)
             : null,
@@ -148,7 +144,6 @@ class _WorkspacePageState extends State<WorkspacePage> {
           _selectTempSession(config);
         },
 
-        // CORRECCIÓN: Implementación del método de editar
         onEditTempSession: (s) {
           final config = _tempConfigs.firstWhere((c) => c.host == s.host);
           _showEditTempSessionDialog(context, config);
@@ -179,7 +174,7 @@ class _WorkspacePageState extends State<WorkspacePage> {
         actions: [
           IconButton(
             icon: const Icon(Icons.arrow_back, size: 20),
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => context.pop(), // REFACTORIZADO
           )
         ],
       ),
@@ -198,7 +193,7 @@ class _WorkspacePageState extends State<WorkspacePage> {
         unselectedItemColor: AppColors.textMuted,
         onTap: (index) {
           if (index == 0) _goHome();
-          if (index == 1) Navigator.pop(context);
+          if (index == 1) context.pop(); // REFACTORIZADO
         },
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.home_outlined), label: 'Inicio'),
@@ -221,7 +216,6 @@ class _WorkspacePageState extends State<WorkspacePage> {
           serverController: widget.serverController,
         );
       case ViewType.tempSessionView:
-      // --- AQUÍ USAMOS LA NUEVA PÁGINA ---
         return TempSessionPage(
           key: ValueKey('temp_${_selectedTempSession!.host}'),
           tempConfig: _selectedTempSession!,
@@ -276,8 +270,6 @@ class _WorkspacePageState extends State<WorkspacePage> {
   }
 
   void _confirmDelete(BuildContext context, String itemName, VoidCallback onConfirm) {
-    // Si tienes el dialog oscuro modularizado, úsalo aquí.
-    // De momento mantengo la misma lógica de UI que tenías en WorkspacePage.
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -287,13 +279,13 @@ class _WorkspacePageState extends State<WorkspacePage> {
         content: Text('¿Estás seguro de que deseas eliminar "$itemName"? Esta acción no se puede deshacer.', style: const TextStyle(color: AppColors.textSecondary)),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => context.pop(), // REFACTORIZADO
             child: const Text('Cancelar', style: TextStyle(color: AppColors.textMuted)),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
             onPressed: () {
-              Navigator.pop(context);
+              context.pop(); // REFACTORIZADO
               onConfirm();
             },
             child: const Text('Eliminar', style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold)),
@@ -321,13 +313,17 @@ class _WorkspacePageState extends State<WorkspacePage> {
             );
 
             if (context.mounted) {
-              Navigator.of(dialogContext).pop();
+              dialogContext.pop(); // REFACTORIZADO
               await _refreshServers();
               _selectServer(newServer);
             }
           } catch (e) {
             if (context.mounted) {
-              Navigator.push(context, MaterialPageRoute(builder: (context) => SshErrorDisplay(errorMessage: e.toString(), onRetry: () => Navigator.pop(context))));
+              // REFACTORIZADO
+              context.push('/error', extra: {
+                'message': e.toString(),
+                'onRetry': () => context.pop(),
+              });
             }
           }
         },
@@ -338,7 +334,7 @@ class _WorkspacePageState extends State<WorkspacePage> {
   void _showEditServerDialog(BuildContext context, ServerConfig server) {
     showDialog(
       context: context,
-      builder: (context) => ConnectionFormDialog(
+      builder: (dialogContext) => ConnectionFormDialog(
         title: 'Editar Servidor',
         subtitle: 'Actualiza los datos de conexión',
         buttonText: 'Guardar Cambios',
@@ -352,7 +348,7 @@ class _WorkspacePageState extends State<WorkspacePage> {
           server.port = port;
           await widget.serverController.updateServer(server);
           if (context.mounted) {
-            Navigator.pop(context);
+            dialogContext.pop(); // REFACTORIZADO
             _refreshServers();
           }
         },
@@ -365,8 +361,8 @@ class _WorkspacePageState extends State<WorkspacePage> {
       context: context,
       builder: (dialogContext) => ConnectionFormDialog(
         title: 'Nueva Sesión Temporal',
-        subtitle: 'Los datos no se guardarán al cerrar la app', // Agregado
-        buttonText: 'Conectar Ahora', // Agregado
+        subtitle: 'Los datos no se guardarán al cerrar la app',
+        buttonText: 'Conectar Ahora',
         onSubmit: (host, user, pass, port) async {
           final config = TempSessionConfig(
             host: host,
@@ -375,14 +371,13 @@ class _WorkspacePageState extends State<WorkspacePage> {
             port: port,
           );
           setState(() => _tempConfigs.add(config));
-          Navigator.pop(dialogContext);
+          dialogContext.pop(); // REFACTORIZADO
           _selectTempSession(config);
         },
       ),
     );
   }
 
-// CORRECCIÓN: Ahora recibe TempSessionConfig en lugar de ServerConfig
   void _showEditTempSessionDialog(BuildContext context, TempSessionConfig config) {
     showDialog(
       context: context,
@@ -394,7 +389,6 @@ class _WorkspacePageState extends State<WorkspacePage> {
         initialUser: config.username,
         initialPass: config.password,
         onSubmit: (host, user, pass, port) async {
-          // Usamos el controlador temporal para desconectar por host
           await widget.tempSessionController.disconnectAndRemove(config.host);
 
           setState(() {
@@ -405,8 +399,8 @@ class _WorkspacePageState extends State<WorkspacePage> {
           });
 
           if (context.mounted) {
-            Navigator.pop(dialogContext);
-            _selectTempSession(config); // Reconecta con los nuevos datos
+            dialogContext.pop(); // REFACTORIZADO
+            _selectTempSession(config);
           }
         },
       ),
