@@ -99,6 +99,9 @@ class ServerController {
     return server;
   }
 
+  /// Acceso al gestor de historial de comandos
+  CommandHistoryManager get commandHistoryManager => _commandHistoryManager;
+
   /// Lógica de validación pura
   void _validateServerInputs(String host, String username, int port, String? password, String? privateKey) {
     if (host.trim().isEmpty) throw ArgumentError('El host es obligatorio.');

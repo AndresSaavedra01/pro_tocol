@@ -99,4 +99,7 @@ class TempSessionController {
     }
     return session;
   }
+
+  /// Acceso al gestor de historial de comandos
+  CommandHistoryManager get commandHistoryManager => _commandHistoryManager;
 }
