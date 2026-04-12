@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:pro_tocol/model/entities/DataBaseEntities.dart';
 import 'package:pro_tocol/model/entities/Server.dart';
 import 'package:pro_tocol/model/repositories/ServerRepository.dart';
@@ -75,19 +76,47 @@ class ServerController {
 
   Future<void> _detectLinuxDistro(Server server) async {
     try {
+      if (!server.sshService.isConnected) {
+        _setDefaultDistroValues(server, 'Not connected');
+        return;
+      }
+
       final rawOsRelease = await server.sshService.runSingleCommand('cat /etc/os-release');
+      
+      if (rawOsRelease.trim().isEmpty) {
+        _setDefaultDistroValues(server, 'Empty os-release');
+        return;
+      }
+
       final values = _parseOsRelease(rawOsRelease);
+      
+      if (values.isEmpty) {
+        _setDefaultDistroValues(server, 'Failed to parse os-release');
+        return;
+      }
+
       final id = values['ID']?.toLowerCase();
       final name = values['NAME']?.replaceAll('"', '').trim();
       final idLike = values['ID_LIKE']?.toLowerCase();
 
+      if (id == null || id.isEmpty) {
+        _setDefaultDistroValues(server, 'Missing ID field');
+        return;
+      }
+
       server.distroName = name ?? id ?? 'Linux';
       server.packageManager = _resolvePackageManager(id, idLike);
-    } catch (_) {
-      // No interrumpimos la conexión si la detección falla.
-      server.distroName ??= 'Linux';
-      server.packageManager ??= 'unknown';
+      debugPrint('[ServerController] Distro detected: ${server.distroName} (PM: ${server.packageManager})');
+    } catch (e) {
+      debugPrint('[ServerController] Distro detection failed: $e');
+      _setDefaultDistroValues(server, e.toString());
     }
+  }
+
+  void _setDefaultDistroValues(Server server, String reason) {
+    server.distroName = 'Linux';
+    server.packageManager = 'unknown';
+    debugPrint('[ServerController] Using defaults ($reason)');
   }
 
   Map<String, String> _parseOsRelease(String raw) {
