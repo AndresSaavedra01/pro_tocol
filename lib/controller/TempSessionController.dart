@@ -2,14 +2,16 @@
 import 'package:pro_tocol/model/entities/TempSession.dart';
 import 'package:pro_tocol/model/entities/TempSessionConfig.dart';
 import 'package:pro_tocol/model/repositories/TempSessionRepository.dart';
+import 'package:pro_tocol/logic/command_history_manager.dart';
 
 class TempSessionController {
   final TempSessionRepository _repository;
+  final CommandHistoryManager _commandHistoryManager;
 
   // Mapa para gestionar las sesiones activas en ejecución (Key: un ID único generado en RAM)
   final Map<String, TempSession> _activeSessions = {};
 
-  TempSessionController(this._repository);
+  TempSessionController(this._repository, this._commandHistoryManager);
 
   Future<TempSession> createAndConnect({
     required String host,
@@ -59,7 +61,9 @@ class TempSessionController {
 
   Future<String> runCommand(String host, String command) async {
     final session = _getValidSession(host);
-    return await session.sshService.runSingleCommand(command);
+    final result = await session.sshService.runSingleCommand(command);
+    _commandHistoryManager.add(command);
+    return result;
   }
 
   /// Utilidad interna para asegurar que la sesión existe y está conectada

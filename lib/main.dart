@@ -21,6 +21,9 @@ import 'package:pro_tocol/controller/ServerController.dart';
 import 'package:pro_tocol/model/repositories/TempSessionRepository.dart';
 import 'package:pro_tocol/view/pages/ProfilePage.dart';
 
+// --- Lógica ---
+import 'package:pro_tocol/logic/command_history_manager.dart';
+
 // --- Vistas ---
 
 
@@ -49,10 +52,13 @@ void main() async {
   final serverRepository = ServerRepository(serverConfigDAO);
   final tempSessionRepository = TempSessionRepository();
 
-  // c. Capa de Controladores (Reglas de negocio y estado en memoria)
+  // c. Capa de Lógica de Negocio
+  final commandHistoryManager = CommandHistoryManager();
+
+  // d. Capa de Controladores (Reglas de negocio y estado en memoria)
   final profileController = ProfileController(profileRepository);
-  final serverController = ServerController(serverRepository, profileRepository);
-  final tempSessionController =  TempSessionController(tempSessionRepository);
+  final serverController = ServerController(serverRepository, profileRepository, commandHistoryManager);
+  final tempSessionController =  TempSessionController(tempSessionRepository, commandHistoryManager);
 
   // 4. Arrancar la aplicación inyectando los controladores en la raíz
   runApp(MyApp(
