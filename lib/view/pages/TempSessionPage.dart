@@ -157,7 +157,7 @@ void _handleTerminalInput(String input, SSHSession session) {
     }
     _currentCommandBuffer = "";
     _isEditingCommand = false;
-  } el tamaño correcto en el servidor
+  } //el tamano correcto en el servidor
   void _startUniversalSync(SSHSession session) {
     int attempts = 0;
     Timer.periodic(const Duration(milliseconds: 300), (timer) async {

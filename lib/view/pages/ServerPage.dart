@@ -179,7 +179,7 @@ void _handleTerminalInput(String input, SSHSession session) {
     }
     _currentCommandBuffer = "";
     _isEditingCommand = false;
-  }esté listo.
+  } 
   void _startUniversalSync(SSHSession session) {
     int attempts = 0;
     Timer.periodic(const Duration(milliseconds: 300), (timer) async {

@@ -13,8 +13,9 @@ import '../../model/entities/TempSessionConfig.dart';
 import '../theme/AppColors.dart';
 import 'ServerPage.dart';
 import 'TempSessionPage.dart';
+import 'DistroLogsPage.dart';
 
-enum ViewType { home, serverView, tempSessionView, loading }
+enum ViewType { home, serverView, tempSessionView, loading, distroLogs }
 
 class WorkspacePage extends StatefulWidget {
   final Profile profile;
@@ -193,10 +194,12 @@ class _WorkspacePageState extends State<WorkspacePage> {
         unselectedItemColor: AppColors.textMuted,
         onTap: (index) {
           if (index == 0) _goHome();
-          if (index == 1) context.pop(); // REFACTORIZADO
+          if (index == 1) setState(() => _currentView = ViewType.distroLogs);
+          if (index == 2) context.pop(); // REFACTORIZADO
         },
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.home_outlined), label: 'Inicio'),
+          BottomNavigationBarItem(icon: Icon(Icons.history, size: 20), label: 'Distro & Logs'),
           BottomNavigationBarItem(icon: Icon(Icons.person_outline), label: 'Perfil'),
         ],
       ),
@@ -221,6 +224,10 @@ class _WorkspacePageState extends State<WorkspacePage> {
           tempConfig: _selectedTempSession!,
           tempController: widget.tempSessionController,
         );
+      case ViewType.distroLogs:
+        return DistroLogsPage(
+          commandHistoryManager: widget.serverController.commandHistoryManager,
+        );
       case ViewType.home:
       default:
         return _buildWelcomeView();
@@ -231,6 +238,7 @@ class _WorkspacePageState extends State<WorkspacePage> {
     if (_currentView == ViewType.serverView) return "Servidor";
     if (_currentView == ViewType.tempSessionView) return "Terminal";
     if (_currentView == ViewType.loading) return "Conectando...";
+    if (_currentView == ViewType.distroLogs) return "Distro & Logs";
     return "Inicio";
   }
 
