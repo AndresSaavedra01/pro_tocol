@@ -43,10 +43,58 @@ class TempSessionController {
       // Usamos el host como llave temporal o un hash de la config
       _activeSessions[host] = session;
 
+      await _detectLinuxDistro(session);
+
       return session;
     } catch (e) {
       throw Exception('Fallo al conectar sesión temporal con $host: $e');
     }
+  }
+
+  Future<void> _detectLinuxDistro(TempSession session) async {
+    try {
+      final rawOsRelease = await session.sshService.runSingleCommand('cat /etc/os-release');
+      final values = _parseOsRelease(rawOsRelease);
+      final id = values['ID']?.toLowerCase();
+      final name = values['NAME']?.replaceAll('"', '').trim();
+      final idLike = values['ID_LIKE']?.toLowerCase();
+
+      session.distroName = name ?? id ?? 'Linux';
+      session.packageManager = _resolvePackageManager(id, idLike);
+    } catch (_) {
+      session.distroName ??= 'Linux';
+      session.packageManager ??= 'unknown';
+    }
+  }
+
+  Map<String, String> _parseOsRelease(String raw) {
+    final lines = raw.split('\n');
+    final Map<String, String> values = {};
+
+    for (final line in lines) {
+      if (line.trim().isEmpty || !line.contains('=')) continue;
+      final index = line.indexOf('=');
+      final key = line.substring(0, index).trim();
+      final value = line.substring(index + 1).trim().replaceAll('"', '');
+      values[key] = value;
+    }
+
+    return values;
+  }
+
+  String _resolvePackageManager(String? id, String? idLike) {
+    final normalizedIdLike = idLike ?? '';
+
+    if (id == 'ubuntu' || id == 'debian' || normalizedIdLike.contains('debian')) {
+      return 'apt';
+    }
+    if (id == 'arch' || id == 'manjaro' || normalizedIdLike.contains('arch')) {
+      return 'pacman';
+    }
+    if (id == 'fedora' || id == 'rhel' || normalizedIdLike.contains('fedora') || normalizedIdLike.contains('rhel')) {
+      return 'dnf';
+    }
+    return 'unknown';
   }
 
   /// 2. GESTIÓN DE ESTADO
