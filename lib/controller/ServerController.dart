@@ -65,9 +65,59 @@ class ServerController {
 
       // Si fue exitoso, lo guardamos en las conexiones activas
       _activeConnections[serverId] = server;
+
+      // Detectar información de distro y package manager en segundo plano.
+      await _detectLinuxDistro(server);
     } catch (e) {
       throw Exception('Fallo al conectar con ${config.host}: $e');
     }
+  }
+
+  Future<void> _detectLinuxDistro(Server server) async {
+    try {
+      final rawOsRelease = await server.sshService.runSingleCommand('cat /etc/os-release');
+      final values = _parseOsRelease(rawOsRelease);
+      final id = values['ID']?.toLowerCase();
+      final name = values['NAME']?.replaceAll('"', '').trim();
+      final idLike = values['ID_LIKE']?.toLowerCase();
+
+      server.distroName = name ?? id ?? 'Linux';
+      server.packageManager = _resolvePackageManager(id, idLike);
+    } catch (_) {
+      // No interrumpimos la conexión si la detección falla.
+      server.distroName ??= 'Linux';
+      server.packageManager ??= 'unknown';
+    }
+  }
+
+  Map<String, String> _parseOsRelease(String raw) {
+    final lines = raw.split('\n');
+    final Map<String, String> values = {};
+
+    for (final line in lines) {
+      if (line.trim().isEmpty || !line.contains('=')) continue;
+      final index = line.indexOf('=');
+      final key = line.substring(0, index).trim();
+      final value = line.substring(index + 1).trim().replaceAll('"', '');
+      values[key] = value;
+    }
+
+    return values;
+  }
+
+  String _resolvePackageManager(String? id, String? idLike) {
+    final normalizedIdLike = idLike ?? '';
+
+    if (id == 'ubuntu' || id == 'debian' || normalizedIdLike.contains('debian')) {
+      return 'apt';
+    }
+    if (id == 'arch' || id == 'manjaro' || normalizedIdLike.contains('arch')) {
+      return 'pacman';
+    }
+    if (id == 'fedora' || id == 'rhel' || normalizedIdLike.contains('fedora') || normalizedIdLike.contains('rhel')) {
+      return 'dnf';
+    }
+    return 'unknown';
   }
 
   Future<void> disconnectFromServer(int serverId) async {
