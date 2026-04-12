@@ -258,6 +258,9 @@ void _handleTerminalInput(String input, SSHSession session) {
   @override
   Widget build(BuildContext context) {
     final connectionString = "${widget.serverConfig.username}@${widget.serverConfig.host}";
+    final distroName = _activeServer?.distroName ?? 'Linux';
+    final packageManager = _activeServer?.packageManager ?? 'unknown';
+    final distroIcon = _getDistroIcon(distroName);
 
     return DefaultTabController(
       length: 3,
@@ -272,6 +275,28 @@ void _handleTerminalInput(String input, SSHSession session) {
                   style: const TextStyle(color: AppColors.textPrimary, fontSize: 18, fontWeight: FontWeight.bold)
               ),
               Text(connectionString, style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
+              if (!widget.isTemporarySession) ...[
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(distroIcon, style: const TextStyle(fontSize: 18)),
+                    const SizedBox(width: 8),
+                    Column(
+                      children: [
+                        Text(
+                          distroName,
+                          style: const TextStyle(color: AppColors.textPrimary, fontSize: 14),
+                        ),
+                        Text(
+                          'Package Manager: $packageManager',
+                          style: const TextStyle(color: AppColors.textMuted, fontSize: 10),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ],
             ],
           ),
           centerTitle: true,
@@ -502,6 +527,17 @@ void _handleTerminalInput(String input, SSHSession session) {
         ],
       ),
     );
+  }
+
+  String _getDistroIcon(String distroName) {
+    final normalized = distroName.toLowerCase();
+    if (normalized.contains('ubuntu')) return '🐧';
+    if (normalized.contains('debian')) return '🦆';
+    if (normalized.contains('arch')) return '🌀';
+    if (normalized.contains('manjaro')) return '🌲';
+    if (normalized.contains('fedora')) return '🛡️';
+    if (normalized.contains('rhel') || normalized.contains('red hat')) return '🔥';
+    return '🐧';
   }
 
   String _formatSize(int bytes) {
