@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:pro_tocol/model/entities/DataBaseEntities.dart';
 import 'package:pro_tocol/model/entities/Server.dart';
 import 'package:pro_tocol/model/repositories/ServerRepository.dart';
@@ -65,9 +66,87 @@ class ServerController {
 
       // Si fue exitoso, lo guardamos en las conexiones activas
       _activeConnections[serverId] = server;
+
+      // Detectar información de distro y package manager en segundo plano.
+      await _detectLinuxDistro(server);
     } catch (e) {
       throw Exception('Fallo al conectar con ${config.host}: $e');
     }
+  }
+
+  Future<void> _detectLinuxDistro(Server server) async {
+    try {
+      if (!server.sshService.isConnected) {
+        _setDefaultDistroValues(server, 'Not connected');
+        return;
+      }
+
+      final rawOsRelease = await server.sshService.runSingleCommand('cat /etc/os-release');
+      
+      if (rawOsRelease.trim().isEmpty) {
+        _setDefaultDistroValues(server, 'Empty os-release');
+        return;
+      }
+
+      final values = _parseOsRelease(rawOsRelease);
+      
+      if (values.isEmpty) {
+        _setDefaultDistroValues(server, 'Failed to parse os-release');
+        return;
+      }
+
+      final id = values['ID']?.toLowerCase();
+      final name = values['NAME']?.replaceAll('"', '').trim();
+      final idLike = values['ID_LIKE']?.toLowerCase();
+
+      if (id == null || id.isEmpty) {
+        _setDefaultDistroValues(server, 'Missing ID field');
+        return;
+      }
+
+      server.distroName = name ?? id ?? 'Linux';
+      server.packageManager = _resolvePackageManager(id, idLike);
+      debugPrint('[ServerController] Distro detected: ${server.distroName} (PM: ${server.packageManager})');
+    } catch (e) {
+      debugPrint('[ServerController] Distro detection failed: $e');
+      _setDefaultDistroValues(server, e.toString());
+    }
+  }
+
+  void _setDefaultDistroValues(Server server, String reason) {
+    server.distroName = 'Linux';
+    server.packageManager = 'unknown';
+    debugPrint('[ServerController] Using defaults ($reason)');
+  }
+
+  Map<String, String> _parseOsRelease(String raw) {
+    final lines = raw.split('\n');
+    final Map<String, String> values = {};
+
+    for (final line in lines) {
+      if (line.trim().isEmpty || !line.contains('=')) continue;
+      final index = line.indexOf('=');
+      final key = line.substring(0, index).trim();
+      final value = line.substring(index + 1).trim().replaceAll('"', '');
+      values[key] = value;
+    }
+
+    return values;
+  }
+
+  String _resolvePackageManager(String? id, String? idLike) {
+    final normalizedIdLike = idLike ?? '';
+
+    if (id == 'ubuntu' || id == 'debian' || normalizedIdLike.contains('debian')) {
+      return 'apt';
+    }
+    if (id == 'arch' || id == 'manjaro' || normalizedIdLike.contains('arch')) {
+      return 'pacman';
+    }
+    if (id == 'fedora' || id == 'rhel' || normalizedIdLike.contains('fedora') || normalizedIdLike.contains('rhel')) {
+      return 'dnf';
+    }
+    return 'unknown';
   }
 
   Future<void> disconnectFromServer(int serverId) async {

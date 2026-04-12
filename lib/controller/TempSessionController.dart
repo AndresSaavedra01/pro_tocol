@@ -1,4 +1,6 @@
 
+import 'package:flutter/foundation.dart';
+
 import 'package:pro_tocol/model/entities/TempSession.dart';
 import 'package:pro_tocol/model/entities/TempSessionConfig.dart';
 import 'package:pro_tocol/model/repositories/TempSessionRepository.dart';
@@ -43,10 +45,87 @@ class TempSessionController {
       // Usamos el host como llave temporal o un hash de la config
       _activeSessions[host] = session;
 
+      await _detectLinuxDistro(session);
+
       return session;
     } catch (e) {
       throw Exception('Fallo al conectar sesión temporal con $host: $e');
     }
+  }
+
+  Future<void> _detectLinuxDistro(TempSession session) async {
+    try {
+      if (!session.sshService.isConnected) {
+        _setDefaultDistroValues(session, 'Not connected');
+        return;
+      }
+
+      final rawOsRelease = await session.sshService.runSingleCommand('cat /etc/os-release');
+      
+      if (rawOsRelease.trim().isEmpty) {
+        _setDefaultDistroValues(session, 'Empty os-release');
+        return;
+      }
+
+      final values = _parseOsRelease(rawOsRelease);
+      
+      if (values.isEmpty) {
+        _setDefaultDistroValues(session, 'Failed to parse os-release');
+        return;
+      }
+
+      final id = values['ID']?.toLowerCase();
+      final name = values['NAME']?.replaceAll('"', '').trim();
+      final idLike = values['ID_LIKE']?.toLowerCase();
+
+      if (id == null || id.isEmpty) {
+        _setDefaultDistroValues(session, 'Missing ID field');
+        return;
+      }
+
+      session.distroName = name ?? id ?? 'Linux';
+      session.packageManager = _resolvePackageManager(id, idLike);
+      debugPrint('[TempSessionController] Distro detected: ${session.distroName} (PM: ${session.packageManager})');
+    } catch (e) {
+      debugPrint('[TempSessionController] Distro detection failed: $e');
+      _setDefaultDistroValues(session, e.toString());
+    }
+  }
+
+  void _setDefaultDistroValues(TempSession session, String reason) {
+    session.distroName = 'Linux';
+    session.packageManager = 'unknown';
+    debugPrint('[TempSessionController] Using defaults ($reason)');
+  }
+
+  Map<String, String> _parseOsRelease(String raw) {
+    final lines = raw.split('\n');
+    final Map<String, String> values = {};
+
+    for (final line in lines) {
+      if (line.trim().isEmpty || !line.contains('=')) continue;
+      final index = line.indexOf('=');
+      final key = line.substring(0, index).trim();
+      final value = line.substring(index + 1).trim().replaceAll('"', '');
+      values[key] = value;
+    }
+
+    return values;
+  }
+
+  String _resolvePackageManager(String? id, String? idLike) {
+    final normalizedIdLike = idLike ?? '';
+
+    if (id == 'ubuntu' || id == 'debian' || normalizedIdLike.contains('debian')) {
+      return 'apt';
+    }
+    if (id == 'arch' || id == 'manjaro' || normalizedIdLike.contains('arch')) {
+      return 'pacman';
+    }
+    if (id == 'fedora' || id == 'rhel' || normalizedIdLike.contains('fedora') || normalizedIdLike.contains('rhel')) {
+      return 'dnf';
+    }
+    return 'unknown';
   }
 
   /// 2. GESTIÓN DE ESTADO

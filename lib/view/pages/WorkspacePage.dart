@@ -227,6 +227,8 @@ class _WorkspacePageState extends State<WorkspacePage> {
       case ViewType.distroLogs:
         return DistroLogsPage(
           commandHistoryManager: widget.serverController.commandHistoryManager,
+          activeServer: _selectedServer != null ? widget.serverController.getActiveServer(_selectedServer!.id) : null,
+          activeSession: _selectedTempSession != null ? widget.tempSessionController.getValidSession(_selectedTempSession!.host) : null,
         );
       case ViewType.home:
       default:
