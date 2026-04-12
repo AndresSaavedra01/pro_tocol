@@ -44,6 +44,10 @@ class _ServerPageState extends State<ServerPage> {
   int _totalRamMb = 0;
   int _usedRamMb = 0;
 
+  // Historial de comandos
+  String _currentCommandBuffer = "";
+  bool _isEditingCommand = false;
+
   @override
   void initState() {
     super.initState();
@@ -88,12 +92,13 @@ class _ServerPageState extends State<ServerPage> {
       });
 
       terminal.onOutput = (input) {
-        session.stdin.add(utf8.encode(input));
+        _handleTerminalInput(input, session);
       };
 
       // Limpiamos la pantalla y notificamos éxito
       terminal.write('\x1Bc');
       terminal.write('\x1B[32mConexión y sincronización establecidas.\x1B[0m\r\n\n');
+      terminal.write('\x1B[32mHistorial de comandos activado (↑/↓ para navegar).\x1B[0m\r\n\n');
 
       // --- ACTIVACIÓN DE MÉTODOS "OLVIDADOS" ---
 
@@ -111,9 +116,70 @@ class _ServerPageState extends State<ServerPage> {
       }
     }
   }
+void _handleTerminalInput(String input, SSHSession session) {
+    // Detectar teclas de flecha para navegación del historial
+    if (input == '\x1B[A') { // Flecha arriba
+      final previousCommand = widget.serverController.commandHistoryManager.previous();
+      if (previousCommand != null) {
+        _updateCommandBuffer(previousCommand);
+      }
+      return;
+    } else if (input == '\x1B[B') { // Flecha abajo
+      final nextCommand = widget.serverController.commandHistoryManager.next();
+      if (nextCommand != null) {
+        _updateCommandBuffer(nextCommand);
+      } else {
+        _clearCommandBuffer();
+      }
+      return;
+    } else if (input == '\r' || input == '\n') { // Enter
+      if (_currentCommandBuffer.isNotEmpty) {
+        // Ejecutar comando
+        session.stdin.add(utf8.encode(_currentCommandBuffer + '\n'));
+        _isEditingCommand = false;
+        _currentCommandBuffer = "";
+      } else {
+        // Solo enviar enter
+        session.stdin.add(utf8.encode(input));
+      }
+      return;
+    } else if (input == '\x7F' || input == '\b') { // Backspace
+      if (_currentCommandBuffer.isNotEmpty) {
+        _currentCommandBuffer = _currentCommandBuffer.substring(0, _currentCommandBuffer.length - 1);
+        // Retroceder cursor y borrar carácter
+        terminal.write('\b \b');
+        return;
+      }
+    } else if (input.length == 1 && input.codeUnitAt(0) >= 32) { // Carácter imprimible
+      _currentCommandBuffer += input;
+      terminal.write(input);
+      _isEditingCommand = true;
+      return;
+    }
 
-  /// Esta función se asegura de que el servidor tenga el tamaño real,
-  /// probando varias veces hasta que el widget esté listo.
+    // Para otros inputs (Ctrl+C, etc.), enviar directamente
+    session.stdin.add(utf8.encode(input));
+  }
+
+  void _updateCommandBuffer(String command) {
+    // Limpiar línea actual
+    for (int i = 0; i < _currentCommandBuffer.length; i++) {
+      terminal.write('\b \b');
+    }
+    // Escribir nuevo comando
+    _currentCommandBuffer = command;
+    terminal.write(command);
+    _isEditingCommand = true;
+  }
+
+  void _clearCommandBuffer() {
+    // Limpiar línea actual
+    for (int i = 0; i < _currentCommandBuffer.length; i++) {
+      terminal.write('\b \b');
+    }
+    _currentCommandBuffer = "";
+    _isEditingCommand = false;
+  } 
   void _startUniversalSync(SSHSession session) {
     int attempts = 0;
     Timer.periodic(const Duration(milliseconds: 300), (timer) async {

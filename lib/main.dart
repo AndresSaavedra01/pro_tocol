@@ -19,11 +19,14 @@ import 'package:pro_tocol/controller/ProfileController.dart';
 import 'package:pro_tocol/controller/ServerController.dart';
 import 'package:pro_tocol/controller/TempSessionController.dart';
 
-// --- Enrutador ---
+// --- Lógica (Tu rama) ---
+import 'package:pro_tocol/logic/command_history_manager.dart';
+
+// --- Enrutador (Predominante de develop) ---
 import 'package:pro_tocol/view/router/AppRouter.dart';
 
-
 void main() async {
+  // 1. Inicialización básica
   WidgetsFlutterBinding.ensureInitialized();
 
   final dir = await getApplicationDocumentsDirectory();
@@ -32,6 +35,7 @@ void main() async {
     directory: dir.path,
   );
 
+  // 2. Inyección de Dependencias
   final profileDAO = ProfileDAO(isar);
   final serverConfigDAO = ServerConfigDAO(isar);
 
@@ -39,11 +43,25 @@ void main() async {
   final serverRepository = ServerRepository(serverConfigDAO);
   final tempSessionRepository = TempSessionRepository();
 
-  final profileController = ProfileController(profileRepository);
-  final serverController = ServerController(serverRepository, profileRepository);
-  final tempSessionController = TempSessionController(tempSessionRepository);
+  // Instanciamos tu nueva lógica
+  final commandHistoryManager = CommandHistoryManager();
 
-  // Instanciamos nuestro enrutador central
+  // 3. Controladores (Adaptados para incluir el commandHistoryManager)
+  final profileController = ProfileController(profileRepository);
+  
+  // OJO: Aquí pasamos el commandHistoryManager como en tu rama local
+  final serverController = ServerController(
+    serverRepository, 
+    profileRepository, 
+    commandHistoryManager,
+  );
+  
+  final tempSessionController = TempSessionController(
+    tempSessionRepository, 
+    commandHistoryManager,
+  );
+
+  // 4. Enrutador (Estructura de develop)
   final appRouter = AppRouter(
     profileController: profileController,
     serverController: serverController,
@@ -63,7 +81,7 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Usamos MaterialApp.router
+    // Predomina el uso de routerConfig de develop
     return MaterialApp.router(
       title: 'Pro-Tocol SSH',
       debugShowCheckedModeBanner: false,

@@ -3,15 +3,17 @@ import 'package:pro_tocol/model/entities/Server.dart';
 import 'package:pro_tocol/model/repositories/ServerRepository.dart';
 import 'package:pro_tocol/model/repositories/ProfileRepository.dart';
 import 'package:pro_tocol/model/entities/ServerMetrics.dart';
+import 'package:pro_tocol/logic/command_history_manager.dart';
 
 class ServerController {
   final ServerRepository _serverRepository;
   final ProfileRepository _profileRepository;
+  final CommandHistoryManager _commandHistoryManager;
 
   // MAPA VITAL: Mantiene vivas las conexiones. La llave es el ID del ServerConfig.
   final Map<int, Server> _activeConnections = {};
 
-  ServerController(this._serverRepository, this._profileRepository);
+  ServerController(this._serverRepository, this._profileRepository, this._commandHistoryManager);
 
   /// 1. VALIDACIÓN Y CREACIÓN
   Future<ServerConfig> createAndLinkServer({
@@ -83,7 +85,9 @@ class ServerController {
 
   Future<String> executeCommand(int serverId, String command) async {
     final server = getActiveServer(serverId);
-    return await server.sshService.runSingleCommand(command);
+    final result = await server.sshService.runSingleCommand(command);
+    _commandHistoryManager.add(command);
+    return result;
   }
 
   /// Utilidad interna para asegurar que operamos sobre un servidor activo
@@ -94,6 +98,9 @@ class ServerController {
     }
     return server;
   }
+
+  /// Acceso al gestor de historial de comandos
+  CommandHistoryManager get commandHistoryManager => _commandHistoryManager;
 
   /// Lógica de validación pura
   void _validateServerInputs(String host, String username, int port, String? password, String? privateKey) {
