@@ -8,6 +8,9 @@ class Server {
   final ServerConfig config;
   final SSHService sshService = SSHService();
 
+  String? distroName;
+  String? packageManager;
+
   Server({required this.config});
 
 }

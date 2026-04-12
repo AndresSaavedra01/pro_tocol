@@ -7,6 +7,9 @@ class TempSession {
   final TempSessionConfig config;
   final SSHService sshService = SSHService();
 
+  String? distroName;
+  String? packageManager;
+
   TempSession({required this.config});
 
 }
