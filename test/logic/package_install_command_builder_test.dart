@@ -39,5 +39,59 @@ void main() {
         throwsArgumentError,
       );
     });
+
+    test('builds apt check installed command', () {
+      final command = PackageInstallCommandBuilder.buildCheckInstalledCommand(
+        packageManager: 'apt',
+        packageName: 'git',
+      );
+
+      expect(command, 'dpkg -s git >/dev/null 2>&1');
+    });
+
+    test('builds pacman check installed command', () {
+      final command = PackageInstallCommandBuilder.buildCheckInstalledCommand(
+        packageManager: 'pacman',
+        packageName: 'htop',
+      );
+
+      expect(command, 'pacman -Qs htop >/dev/null 2>&1');
+    });
+
+    test('builds dnf check installed command', () {
+      final command = PackageInstallCommandBuilder.buildCheckInstalledCommand(
+        packageManager: 'dnf',
+        packageName: 'curl',
+      );
+
+      expect(command, 'rpm -q curl >/dev/null 2>&1');
+    });
+
+    test('builds apt uninstall command', () {
+      final command = PackageInstallCommandBuilder.buildUninstallCommand(
+        packageManager: 'apt',
+        packageName: 'git',
+      );
+
+      expect(command, 'sudo apt remove -y git');
+    });
+
+    test('builds pacman uninstall command', () {
+      final command = PackageInstallCommandBuilder.buildUninstallCommand(
+        packageManager: 'pacman',
+        packageName: 'htop',
+      );
+
+      expect(command, 'sudo pacman -Rns --noconfirm htop');
+    });
+
+    test('builds dnf uninstall command', () {
+      final command = PackageInstallCommandBuilder.buildUninstallCommand(
+        packageManager: 'dnf',
+        packageName: 'nginx',
+      );
+
+      expect(command, 'sudo dnf remove -y nginx');
+    });
   });
 }
