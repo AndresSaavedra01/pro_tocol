@@ -5,6 +5,8 @@ import 'package:dartssh2/dartssh2.dart';
 import 'package:flutter/material.dart';
 import 'package:xterm/xterm.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:pro_tocol/logic/apps_manager_catalog.dart';
+import 'package:pro_tocol/logic/apps_manager_state.dart';
 
 import 'package:pro_tocol/controller/ServerController.dart';
 import 'package:pro_tocol/model/entities/DataBaseEntities.dart';
@@ -46,7 +48,6 @@ class _ServerPageState extends State<ServerPage> {
 
   // Historial de comandos
   String _currentCommandBuffer = "";
-  bool _isEditingCommand = false;
 
   @override
   void initState() {
@@ -136,7 +137,6 @@ void _handleTerminalInput(String input, SSHSession session) {
       if (_currentCommandBuffer.isNotEmpty) {
         // Ejecutar comando
         session.stdin.add(utf8.encode(_currentCommandBuffer + '\n'));
-        _isEditingCommand = false;
         _currentCommandBuffer = "";
       } else {
         // Solo enviar enter
@@ -153,7 +153,6 @@ void _handleTerminalInput(String input, SSHSession session) {
     } else if (input.length == 1 && input.codeUnitAt(0) >= 32) { // Carácter imprimible
       _currentCommandBuffer += input;
       terminal.write(input);
-      _isEditingCommand = true;
       return;
     }
 
@@ -169,16 +168,14 @@ void _handleTerminalInput(String input, SSHSession session) {
     // Escribir nuevo comando
     _currentCommandBuffer = command;
     terminal.write(command);
-    _isEditingCommand = true;
   }
 
   void _clearCommandBuffer() {
-    // Limpiar línea actual
+    // Limpiar linea actual
     for (int i = 0; i < _currentCommandBuffer.length; i++) {
       terminal.write('\b \b');
     }
     _currentCommandBuffer = "";
-    _isEditingCommand = false;
   } 
   void _startUniversalSync(SSHSession session) {
     int attempts = 0;
@@ -263,7 +260,7 @@ void _handleTerminalInput(String input, SSHSession session) {
     final distroIcon = _getDistroIcon(distroName);
 
     return DefaultTabController(
-      length: 3,
+      length: widget.isTemporarySession ? 1 : 4,
       child: Scaffold(
         backgroundColor: AppColors.background,
         appBar: AppBar(
@@ -305,7 +302,12 @@ void _handleTerminalInput(String input, SSHSession session) {
               : const TabBar(
             indicatorColor: AppColors.primary,
             labelColor: AppColors.textPrimary,
-            tabs: [Tab(text: 'Estado'), Tab(text: 'Terminal'), Tab(text: 'Archivos')],
+            tabs: [
+              Tab(text: 'Estado'),
+              Tab(text: 'Terminal'),
+              Tab(text: 'Archivos'),
+              Tab(text: 'Apps Manager'),
+            ],
           ),
         ),
         body: widget.isTemporarySession
@@ -316,6 +318,7 @@ void _handleTerminalInput(String input, SSHSession session) {
             _buildEstadoTab(),
             _buildTerminalTab(),
             _buildArchivosTab(),
+            _buildAppsManagerTab(),
           ],
         ),
       ),
@@ -402,6 +405,119 @@ void _handleTerminalInput(String input, SSHSession session) {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildAppsManagerTab() {
+    return ValueListenableBuilder<Map<String, AppInstallState>>(
+      valueListenable: widget.serverController.installStatesListenable(widget.serverConfig.id),
+      builder: (context, states, _) {
+        return ListView.separated(
+          padding: const EdgeInsets.all(16),
+          itemCount: AppsManagerCatalog.commonApps.length,
+          separatorBuilder: (_, __) => const SizedBox(height: 10),
+          itemBuilder: (context, index) {
+            final app = AppsManagerCatalog.commonApps[index];
+            final state = states[app.id] ?? const AppInstallState.idle();
+            return _buildManagedAppCard(app: app, state: state);
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildManagedAppCard({
+    required ManagedApp app,
+    required AppInstallState state,
+  }) {
+    final packageManager = (_activeServer?.packageManager ?? 'unknown').toLowerCase();
+    final canInstall = !state.isBusy && packageManager != 'unknown';
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: AppTheme.glassCard.copyWith(color: AppColors.surface),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  app.displayName,
+                  style: const TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  app.description,
+                  style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
+                ),
+                const SizedBox(height: 8),
+                _buildInstallStateBadge(state),
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          ElevatedButton(
+            onPressed: canInstall
+                ? () {
+                    widget.serverController.installAppInBackground(
+                      serverId: widget.serverConfig.id,
+                      appId: app.id,
+                      packageName: app.packageName,
+                    );
+                  }
+                : null,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              disabledBackgroundColor: AppColors.border,
+              foregroundColor: AppColors.textPrimary,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            ),
+            child: Text(state.isBusy ? 'Instalando...' : 'Instalar'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInstallStateBadge(AppInstallState state) {
+    String label;
+    Color color;
+
+    switch (state.status) {
+      case AppInstallStatus.installing:
+        label = 'Instalando';
+        color = Colors.amber;
+        break;
+      case AppInstallStatus.success:
+        label = 'Exito';
+        color = AppColors.success;
+        break;
+      case AppInstallStatus.failure:
+        label = 'Fallo';
+        color = AppColors.error;
+        break;
+      case AppInstallStatus.idle:
+        label = 'Listo';
+        color = AppColors.textMuted;
+        break;
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.18),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: color.withOpacity(0.35)),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w700),
+      ),
     );
   }
 
