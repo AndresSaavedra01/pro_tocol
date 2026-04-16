@@ -37,9 +37,14 @@ class _ServerPageState extends State<ServerPage> {
   Server? _activeServer;
   Timer? _metricsTimer;
   late final ValueListenable<Map<String, AppInstallState>> _appInstallStatesListenable;
+  late final ValueListenable<List<ManagedApp>> _appsSearchResultsListenable;
   Map<String, AppInstallState> _previousAppInstallStates = const {};
   bool _appsStatusSyncRequested = false;
   bool _isAppsStatusSyncInProgress = false;
+  final TextEditingController _appsSearchController = TextEditingController();
+  Timer? _appsSearchDebounce;
+  bool _isAppsSearchInProgress = false;
+  int _searchRequestId = 0;
 
   String currentPath = "/";
   List<FlSpot> cpuPoints = [const FlSpot(0, 0)];
@@ -59,6 +64,7 @@ class _ServerPageState extends State<ServerPage> {
     super.initState();
     terminal = Terminal(maxLines: 10000);
     _appInstallStatesListenable = widget.serverController.installStatesListenable(widget.serverConfig.id);
+    _appsSearchResultsListenable = widget.serverController.searchResultsListenable(widget.serverConfig.id);
     _previousAppInstallStates = Map<String, AppInstallState>.from(
       widget.serverController.getInstallStates(widget.serverConfig.id),
     );
@@ -70,6 +76,8 @@ class _ServerPageState extends State<ServerPage> {
   void dispose() {
     _metricsTimer?.cancel();
     _appInstallStatesListenable.removeListener(_handleAppInstallStateChanged);
+    _appsSearchDebounce?.cancel();
+    _appsSearchController.dispose();
     super.dispose();
   }
 
@@ -480,44 +488,139 @@ void _handleTerminalInput(String input, SSHSession session) {
     return ValueListenableBuilder<Map<String, AppInstallState>>(
       valueListenable: widget.serverController.installStatesListenable(widget.serverConfig.id),
       builder: (context, states, _) {
-        return Column(
-          children: [
-            if (_isAppsStatusSyncInProgress)
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                color: AppColors.surface,
-                child: const Row(
-                  children: [
-                    SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
+        return ValueListenableBuilder<List<ManagedApp>>(
+          valueListenable: _appsSearchResultsListenable,
+          builder: (context, searchResults, __) {
+            return Column(
+              children: [
+                if (_isAppsStatusSyncInProgress)
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    color: AppColors.surface,
+                    child: const Row(
+                      children: [
+                        SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
+                        ),
+                        SizedBox(width: 10),
+                        Text(
+                          'Comprobando apps instaladas...',
+                          style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+                        ),
+                      ],
                     ),
-                    SizedBox(width: 10),
-                    Text(
-                      'Comprobando apps instaladas...',
-                      style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+                  ),
+                Container(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                  color: AppColors.surface,
+                  child: TextField(
+                    controller: _appsSearchController,
+                    onChanged: _handleAppsSearchChanged,
+                    style: const TextStyle(color: AppColors.textPrimary),
+                    decoration: InputDecoration(
+                      hintText: 'Buscar paquetes (git, htop, nginx...)',
+                      hintStyle: const TextStyle(color: AppColors.textMuted),
+                      prefixIcon: const Icon(Icons.search, color: AppColors.textMuted),
+                      suffixIcon: _isAppsSearchInProgress
+                          ? const Padding(
+                              padding: EdgeInsets.all(12),
+                              child: SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              ),
+                            )
+                          : (_appsSearchController.text.trim().isNotEmpty
+                              ? IconButton(
+                                  onPressed: _clearAppsSearch,
+                                  icon: const Icon(Icons.close, color: AppColors.textMuted),
+                                )
+                              : null),
+                      filled: true,
+                      fillColor: AppColors.background,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: const BorderSide(color: AppColors.border),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: const BorderSide(color: AppColors.border),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: const BorderSide(color: AppColors.primary),
+                      ),
                     ),
-                  ],
+                  ),
                 ),
-              ),
-            Expanded(
-              child: ListView.separated(
-                padding: const EdgeInsets.all(16),
-                itemCount: AppsManagerCatalog.commonApps.length,
-                separatorBuilder: (_, __) => const SizedBox(height: 10),
-                itemBuilder: (context, index) {
-                  final app = AppsManagerCatalog.commonApps[index];
-                  final state = states[app.id] ?? const AppInstallState.idle();
-                  return _buildManagedAppCard(app: app, state: state);
-                },
-              ),
-            ),
-          ],
+                Expanded(
+                  child: searchResults.isEmpty
+                      ? const Center(
+                          child: Text(
+                            'Sin resultados para tu búsqueda.',
+                            style: TextStyle(color: AppColors.textMuted),
+                          ),
+                        )
+                      : ListView.separated(
+                          padding: const EdgeInsets.all(16),
+                          itemCount: searchResults.length,
+                          separatorBuilder: (_, __) => const SizedBox(height: 10),
+                          itemBuilder: (context, index) {
+                            final app = searchResults[index];
+                            final state = states[app.id] ?? const AppInstallState.idle();
+                            return _buildManagedAppCard(app: app, state: state);
+                          },
+                        ),
+                ),
+              ],
+            );
+          },
         );
       },
     );
+  }
+
+  void _handleAppsSearchChanged(String value) {
+    _appsSearchDebounce?.cancel();
+    _appsSearchDebounce = Timer(const Duration(milliseconds: 350), () {
+      _runAppsSearch(value);
+    });
+    setState(() {});
+  }
+
+  Future<void> _runAppsSearch(String query) async {
+    final requestId = ++_searchRequestId;
+    if (mounted) {
+      setState(() {
+        _isAppsSearchInProgress = true;
+      });
+    }
+
+    try {
+      await widget.serverController.searchApps(
+        serverId: widget.serverConfig.id,
+        query: query,
+      );
+    } finally {
+      if (!mounted || requestId != _searchRequestId) {
+        return;
+      }
+      setState(() {
+        _isAppsSearchInProgress = false;
+      });
+    }
+  }
+
+  void _clearAppsSearch() {
+    _appsSearchController.clear();
+    _appsSearchDebounce?.cancel();
+    _runAppsSearch('');
+    if (mounted) {
+      setState(() {});
+    }
   }
 
   Future<void> _syncAppsStatus() async {
