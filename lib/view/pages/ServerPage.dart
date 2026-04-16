@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 import 'package:dartssh2/dartssh2.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:xterm/xterm.dart';
 import 'package:fl_chart/fl_chart.dart';
@@ -35,6 +36,8 @@ class _ServerPageState extends State<ServerPage> {
   late final Terminal terminal;
   Server? _activeServer;
   Timer? _metricsTimer;
+  late final ValueListenable<Map<String, AppInstallState>> _appInstallStatesListenable;
+  Map<String, AppInstallState> _previousAppInstallStates = const {};
 
   String currentPath = "/";
   List<FlSpot> cpuPoints = [const FlSpot(0, 0)];
@@ -53,13 +56,60 @@ class _ServerPageState extends State<ServerPage> {
   void initState() {
     super.initState();
     terminal = Terminal(maxLines: 10000);
+    _appInstallStatesListenable = widget.serverController.installStatesListenable(widget.serverConfig.id);
+    _previousAppInstallStates = Map<String, AppInstallState>.from(
+      widget.serverController.getInstallStates(widget.serverConfig.id),
+    );
+    _appInstallStatesListenable.addListener(_handleAppInstallStateChanged);
     _connectToServerController();
   }
 
   @override
   void dispose() {
     _metricsTimer?.cancel();
+    _appInstallStatesListenable.removeListener(_handleAppInstallStateChanged);
     super.dispose();
+  }
+
+  void _handleAppInstallStateChanged() {
+    if (!mounted) return;
+
+    final currentStates = Map<String, AppInstallState>.from(_appInstallStatesListenable.value);
+
+    for (final entry in currentStates.entries) {
+      final previousState = _previousAppInstallStates[entry.key]?.status;
+      final currentState = entry.value.status;
+
+      if (previousState == currentState) {
+        continue;
+      }
+
+      final app = AppsManagerCatalog.byId(entry.key);
+      final appName = app?.displayName ?? entry.key;
+
+      if (currentState == AppInstallStatus.installing) {
+        _showInstallSnackBar('$appName: instalando');
+      } else if (currentState == AppInstallStatus.success) {
+        _showInstallSnackBar('$appName: instalación exitosa');
+      } else if (currentState == AppInstallStatus.failure) {
+        _showInstallSnackBar('$appName: instalación fallida', isError: true);
+      }
+    }
+
+    _previousAppInstallStates = currentStates;
+  }
+
+  void _showInstallSnackBar(String message, {bool isError = false}) {
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    if (messenger == null) return;
+
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: isError ? AppColors.error : AppColors.surface,
+      ),
+    );
   }
 
   Future<void> _connectToServerController() async {
@@ -457,6 +507,20 @@ void _handleTerminalInput(String input, SSHSession session) {
                 ),
                 const SizedBox(height: 8),
                 _buildInstallStateBadge(state),
+                if (state.message != null && state.message!.trim().isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    state.message!,
+                    style: const TextStyle(color: AppColors.textMuted, fontSize: 11),
+                  ),
+                ],
+                if (packageManager == 'unknown') ...[
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Package manager no detectado para esta sesión.',
+                    style: TextStyle(color: AppColors.error, fontSize: 11),
+                  ),
+                ],
               ],
             ),
           ),
