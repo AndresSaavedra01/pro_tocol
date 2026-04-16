@@ -39,6 +39,7 @@ class _ServerPageState extends State<ServerPage> {
   late final ValueListenable<Map<String, AppInstallState>> _appInstallStatesListenable;
   Map<String, AppInstallState> _previousAppInstallStates = const {};
   bool _appsStatusSyncRequested = false;
+  bool _isAppsStatusSyncInProgress = false;
 
   String currentPath = "/";
   List<FlSpot> cpuPoints = [const FlSpot(0, 0)];
@@ -472,25 +473,73 @@ void _handleTerminalInput(String input, SSHSession session) {
       _appsStatusSyncRequested = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
-        widget.serverController.refreshInstalledAppsInBackground(serverId: widget.serverConfig.id);
+        _syncAppsStatus();
       });
     }
 
     return ValueListenableBuilder<Map<String, AppInstallState>>(
       valueListenable: widget.serverController.installStatesListenable(widget.serverConfig.id),
       builder: (context, states, _) {
-        return ListView.separated(
-          padding: const EdgeInsets.all(16),
-          itemCount: AppsManagerCatalog.commonApps.length,
-          separatorBuilder: (_, __) => const SizedBox(height: 10),
-          itemBuilder: (context, index) {
-            final app = AppsManagerCatalog.commonApps[index];
-            final state = states[app.id] ?? const AppInstallState.idle();
-            return _buildManagedAppCard(app: app, state: state);
-          },
+        return Column(
+          children: [
+            if (_isAppsStatusSyncInProgress)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                color: AppColors.surface,
+                child: const Row(
+                  children: [
+                    SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
+                    ),
+                    SizedBox(width: 10),
+                    Text(
+                      'Comprobando apps instaladas...',
+                      style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+            Expanded(
+              child: ListView.separated(
+                padding: const EdgeInsets.all(16),
+                itemCount: AppsManagerCatalog.commonApps.length,
+                separatorBuilder: (_, __) => const SizedBox(height: 10),
+                itemBuilder: (context, index) {
+                  final app = AppsManagerCatalog.commonApps[index];
+                  final state = states[app.id] ?? const AppInstallState.idle();
+                  return _buildManagedAppCard(app: app, state: state);
+                },
+              ),
+            ),
+          ],
         );
       },
     );
+  }
+
+  Future<void> _syncAppsStatus() async {
+    if (_isAppsStatusSyncInProgress) return;
+
+    if (mounted) {
+      setState(() {
+        _isAppsStatusSyncInProgress = true;
+      });
+    }
+
+    try {
+      await widget.serverController.refreshInstalledApps(serverId: widget.serverConfig.id);
+    } catch (_) {
+      // Evitamos ruido visual; la UI ya refleja fallos por app cuando aplique.
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isAppsStatusSyncInProgress = false;
+        });
+      }
+    }
   }
 
   Widget _buildManagedAppCard({

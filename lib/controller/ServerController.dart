@@ -236,6 +236,11 @@ class ServerController {
 
   /// Sincroniza en segundo plano si cada app del catálogo está instalada.
   void refreshInstalledAppsInBackground({required int serverId}) {
+    unawaited(refreshInstalledApps(serverId: serverId));
+  }
+
+  /// Sincroniza de forma explícita si cada app del catálogo está instalada.
+  Future<void> refreshInstalledApps({required int serverId}) async {
     final server = getActiveServer(serverId);
     final packageManager = (server.packageManager ?? 'unknown').toLowerCase();
 
@@ -243,11 +248,9 @@ class ServerController {
       return;
     }
 
-    unawaited(
-      _syncInstalledApps(
-        serverId: serverId,
-        packageManager: packageManager,
-      ),
+    await _syncInstalledApps(
+      serverId: serverId,
+      packageManager: packageManager,
     );
   }
 

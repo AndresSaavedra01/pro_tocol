@@ -93,5 +93,42 @@ void main() {
 
       expect(command, 'sudo dnf remove -y nginx');
     });
+
+    test('builds apt search command', () {
+      final command = PackageInstallCommandBuilder.buildSearchCommand(
+        packageManager: 'apt',
+        query: 'git',
+      );
+
+      expect(command, 'apt search git');
+    });
+
+    test('builds pacman search command', () {
+      final command = PackageInstallCommandBuilder.buildSearchCommand(
+        packageManager: 'pacman',
+        query: 'docker',
+      );
+
+      expect(command, 'pacman -Ss docker');
+    });
+
+    test('builds dnf search command', () {
+      final command = PackageInstallCommandBuilder.buildSearchCommand(
+        packageManager: 'dnf',
+        query: 'nginx',
+      );
+
+      expect(command, 'dnf search nginx');
+    });
+
+    test('rejects empty search query', () {
+      expect(
+        () => PackageInstallCommandBuilder.buildSearchCommand(
+          packageManager: 'apt',
+          query: '   ',
+        ),
+        throwsArgumentError,
+      );
+    });
   });
 }

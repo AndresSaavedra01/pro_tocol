@@ -52,6 +52,26 @@ class PackageInstallCommandBuilder {
     }
   }
 
+  static String buildSearchCommand({
+    required String packageManager,
+    required String query,
+  }) {
+    final normalized = _validateInputs(packageManager, query);
+    final normalizedManager = normalized.$1;
+    final normalizedQuery = normalized.$2;
+
+    switch (normalizedManager) {
+      case 'apt':
+        return 'apt search $normalizedQuery';
+      case 'pacman':
+        return 'pacman -Ss $normalizedQuery';
+      case 'dnf':
+        return 'dnf search $normalizedQuery';
+      default:
+        throw ArgumentError('Package manager no soportado: $packageManager');
+    }
+  }
+
   static (String, String) _validateInputs(String packageManager, String packageName) {
     final normalizedManager = packageManager.trim().toLowerCase();
     final normalizedPackage = packageName.trim();
