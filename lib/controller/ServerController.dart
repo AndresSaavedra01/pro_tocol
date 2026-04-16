@@ -20,6 +20,8 @@ class ServerController {
   final Map<int, Server> _activeConnections = {};
   final Map<int, Map<String, AppInstallState>> _appInstallStates = {};
   final Map<int, ValueNotifier<Map<String, AppInstallState>>> _appInstallNotifiers = {};
+  final Map<int, List<ManagedApp>> _appsSearchResults = {};
+  final Map<int, ValueNotifier<List<ManagedApp>>> _appsSearchNotifiers = {};
   static const String _exitCodeMarker = '__PROTOCOL_EXIT_CODE:';
 
   ServerController(this._serverRepository, this._profileRepository, this._commandHistoryManager);
@@ -80,6 +82,9 @@ class ServerController {
 
       // Detectar estado de apps instaladas en segundo plano.
       refreshInstalledAppsInBackground(serverId: serverId);
+
+      // Estado inicial de búsqueda: catálogo base.
+      _setSearchResults(serverId, AppsManagerCatalog.commonApps);
     } catch (e) {
       throw Exception('Fallo al conectar con ${config.host}: $e');
     }
@@ -169,6 +174,10 @@ class ServerController {
     _appInstallStates.remove(serverId);
     final notifier = _appInstallNotifiers.remove(serverId);
     notifier?.dispose();
+
+    _appsSearchResults.remove(serverId);
+    final searchNotifier = _appsSearchNotifiers.remove(serverId);
+    searchNotifier?.dispose();
   }
 
   /// 3. EJECUCIÓN DE SERVICIOS
@@ -267,6 +276,65 @@ class ServerController {
       serverId,
       () => ValueNotifier<Map<String, AppInstallState>>(Map.unmodifiable(_appInstallStates[serverId] ?? {})),
     );
+  }
+
+  List<ManagedApp> getSearchResults(int serverId) {
+    return List.unmodifiable(_appsSearchResults[serverId] ?? AppsManagerCatalog.commonApps);
+  }
+
+  ValueListenable<List<ManagedApp>> searchResultsListenable(int serverId) {
+    return _appsSearchNotifiers.putIfAbsent(
+      serverId,
+      () => ValueNotifier<List<ManagedApp>>(List.unmodifiable(_appsSearchResults[serverId] ?? AppsManagerCatalog.commonApps)),
+    );
+  }
+
+  Future<void> searchApps({
+    required int serverId,
+    required String query,
+  }) async {
+    final server = getActiveServer(serverId);
+    final normalizedQuery = query.trim().toLowerCase();
+    final packageManager = (server.packageManager ?? 'unknown').toLowerCase();
+
+    final localMatches = _searchInCatalog(normalizedQuery);
+    if (normalizedQuery.isEmpty) {
+      _setSearchResults(serverId, localMatches);
+      return;
+    }
+
+    if (!PackageInstallCommandBuilder.supportedPackageManagers.contains(packageManager)) {
+      _setSearchResults(serverId, localMatches);
+      return;
+    }
+
+    try {
+      final searchCommand = PackageInstallCommandBuilder.buildSearchCommand(
+        packageManager: packageManager,
+        query: normalizedQuery,
+      );
+
+      final result = await _executeCommandWithStatus(
+        server,
+        searchCommand,
+        addToHistory: false,
+      );
+
+      if (result.exitCode != 0 || result.output.trim().isEmpty) {
+        _setSearchResults(serverId, localMatches);
+        return;
+      }
+
+      final remoteMatches = _parseRemoteSearchResults(
+        packageManager: packageManager,
+        rawOutput: result.output,
+      );
+
+      final merged = _mergeSearchResults(localMatches, remoteMatches);
+      _setSearchResults(serverId, merged);
+    } catch (_) {
+      _setSearchResults(serverId, localMatches);
+    }
   }
 
   Future<void> _runAppInstall({
@@ -476,6 +544,171 @@ class ServerController {
       () => ValueNotifier<Map<String, AppInstallState>>(const {}),
     );
     notifier.value = Map.unmodifiable(next);
+  }
+
+  List<ManagedApp> _searchInCatalog(String normalizedQuery) {
+    if (normalizedQuery.isEmpty) {
+      return List<ManagedApp>.from(AppsManagerCatalog.commonApps);
+    }
+
+    return AppsManagerCatalog.commonApps.where((app) {
+      final id = app.id.toLowerCase();
+      final name = app.displayName.toLowerCase();
+      final packageName = app.packageName.toLowerCase();
+      final description = app.description.toLowerCase();
+
+      return id.contains(normalizedQuery) ||
+          name.contains(normalizedQuery) ||
+          packageName.contains(normalizedQuery) ||
+          description.contains(normalizedQuery);
+    }).toList();
+  }
+
+  List<ManagedApp> _parseRemoteSearchResults({
+    required String packageManager,
+    required String rawOutput,
+  }) {
+    switch (packageManager) {
+      case 'apt':
+        return _parseAptSearchResults(rawOutput);
+      case 'pacman':
+        return _parsePacmanSearchResults(rawOutput);
+      case 'dnf':
+        return _parseDnfSearchResults(rawOutput);
+      default:
+        return const [];
+    }
+  }
+
+  List<ManagedApp> _parseAptSearchResults(String output) {
+    final results = <ManagedApp>[];
+    final lines = output.split('\n');
+
+    for (final rawLine in lines) {
+      final line = rawLine.trim();
+      if (line.isEmpty || line.startsWith('Sorting') || line.startsWith('Full Text Search')) {
+        continue;
+      }
+      if (!line.contains('/')) {
+        continue;
+      }
+
+      final packageName = line.split('/').first.trim();
+      if (packageName.isEmpty) {
+        continue;
+      }
+
+      results.add(_toManagedApp(packageName: packageName));
+      if (results.length >= 30) break;
+    }
+
+    return results;
+  }
+
+  List<ManagedApp> _parsePacmanSearchResults(String output) {
+    final results = <ManagedApp>[];
+    final lines = output.split('\n');
+
+    for (final rawLine in lines) {
+      if (!rawLine.contains('/')) {
+        continue;
+      }
+
+      final line = rawLine.trim();
+      if (line.isEmpty) {
+        continue;
+      }
+
+      final firstToken = line.split(RegExp(r'\s+')).first;
+      final slashIndex = firstToken.indexOf('/');
+      if (slashIndex == -1 || slashIndex == firstToken.length - 1) {
+        continue;
+      }
+
+      final packageName = firstToken.substring(slashIndex + 1).trim();
+      if (packageName.isEmpty) {
+        continue;
+      }
+
+      results.add(_toManagedApp(packageName: packageName));
+      if (results.length >= 30) break;
+    }
+
+    return results;
+  }
+
+  List<ManagedApp> _parseDnfSearchResults(String output) {
+    final results = <ManagedApp>[];
+    final lines = output.split('\n');
+
+    for (final rawLine in lines) {
+      final line = rawLine.trim();
+      if (line.isEmpty || line.startsWith('=')) {
+        continue;
+      }
+
+      final separatorIndex = line.indexOf(':');
+      if (separatorIndex == -1) {
+        continue;
+      }
+
+      final leftPart = line.substring(0, separatorIndex).trim();
+      if (leftPart.isEmpty) {
+        continue;
+      }
+
+      final firstToken = leftPart.split(RegExp(r'\s+')).first;
+      final packageName = firstToken.replaceFirst(RegExp(r'\.(x86_64|i686|noarch|aarch64)$'), '').trim();
+      if (packageName.isEmpty) {
+        continue;
+      }
+
+      results.add(_toManagedApp(packageName: packageName));
+      if (results.length >= 30) break;
+    }
+
+    return results;
+  }
+
+  ManagedApp _toManagedApp({
+    required String packageName,
+    String? fallbackDescription,
+  }) {
+    final normalized = packageName.toLowerCase();
+    for (final app in AppsManagerCatalog.commonApps) {
+      if (app.packageName.toLowerCase() == normalized || app.id.toLowerCase() == normalized) {
+        return app;
+      }
+    }
+
+    return ManagedApp(
+      id: packageName,
+      displayName: packageName,
+      packageName: packageName,
+      description: fallbackDescription ?? 'Resultado remoto',
+    );
+  }
+
+  List<ManagedApp> _mergeSearchResults(List<ManagedApp> local, List<ManagedApp> remote) {
+    final byPackage = <String, ManagedApp>{};
+
+    for (final app in local) {
+      byPackage[app.packageName.toLowerCase()] = app;
+    }
+    for (final app in remote) {
+      byPackage.putIfAbsent(app.packageName.toLowerCase(), () => app);
+    }
+
+    return byPackage.values.toList(growable: false);
+  }
+
+  void _setSearchResults(int serverId, List<ManagedApp> results) {
+    _appsSearchResults[serverId] = List<ManagedApp>.from(results);
+    final notifier = _appsSearchNotifiers.putIfAbsent(
+      serverId,
+      () => ValueNotifier<List<ManagedApp>>(const []),
+    );
+    notifier.value = List.unmodifiable(_appsSearchResults[serverId]!);
   }
 
   /// Utilidad interna para asegurar que operamos sobre un servidor activo
