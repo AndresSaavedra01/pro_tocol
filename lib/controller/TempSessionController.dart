@@ -18,6 +18,7 @@ class TempSessionController {
   final Map<String, TempSession> _activeSessions = {};
   final Map<String, Map<String, AppInstallState>> _appInstallStates = {};
   final Map<String, ValueNotifier<Map<String, AppInstallState>>> _appInstallNotifiers = {};
+  static const String _exitCodeMarker = '__PROTOCOL_EXIT_CODE:';
 
   TempSessionController(this._repository, this._commandHistoryManager);
 
@@ -202,15 +203,36 @@ class TempSessionController {
     required String packageManager,
   }) async {
     try {
+      final session = _getValidSession(host);
       final command = PackageInstallCommandBuilder.buildInstallCommand(
         packageManager: packageManager,
         packageName: packageName,
       );
+      final commandWithSudoHandling = _withSudoPasswordIfAvailable(
+        command,
+        session.config.password,
+      );
 
-      final output = await runCommand(host, command);
+      var result = await _executeCommandWithStatus(session, commandWithSudoHandling);
 
-      if (_looksLikeInstallFailure(output)) {
-        _setInstallState(host, appId, AppInstallState.failure(output.isEmpty ? 'Fallo desconocido' : output));
+      // En Arch Linux, pacman usa '-S' para instalar paquetes.
+      if (result.exitCode != 0 && packageManager == 'pacman') {
+        final fallbackCommand = 'sudo pacman -S --noconfirm $packageName';
+        final fallbackCommandWithSudoHandling = _withSudoPasswordIfAvailable(
+          fallbackCommand,
+          session.config.password,
+        );
+        result = await _executeCommandWithStatus(session, fallbackCommandWithSudoHandling);
+      }
+
+      if (result.exitCode != 0 || _looksLikeInstallFailure(result.output)) {
+        final errorMessage = _buildInstallFailureMessage(
+          output: result.output,
+          packageName: packageName,
+          exitCode: result.exitCode,
+          hasPassword: (session.config.password ?? '').trim().isNotEmpty,
+        );
+        _setInstallState(host, appId, AppInstallState.failure(errorMessage));
         return;
       }
 
@@ -218,6 +240,59 @@ class TempSessionController {
     } catch (e) {
       _setInstallState(host, appId, AppInstallState.failure(e.toString()));
     }
+  }
+
+  String _withSudoPasswordIfAvailable(String command, String? password) {
+    final trimmedPassword = (password ?? '').trim();
+    if (trimmedPassword.isEmpty || !command.startsWith('sudo ')) {
+      return command;
+    }
+
+    final escapedPassword = _shellSingleQuoteEscape(trimmedPassword);
+    final sudoReadyCommand = command.replaceFirst('sudo ', "sudo -S -p '' ");
+    return "printf '%s\\n' '$escapedPassword' | $sudoReadyCommand";
+  }
+
+  String _shellSingleQuoteEscape(String value) {
+    return value.replaceAll("'", "'\"'\"'");
+  }
+
+  String _buildInstallFailureMessage({
+    required String output,
+    required String packageName,
+    required int exitCode,
+    required bool hasPassword,
+  }) {
+    final normalized = output.toLowerCase();
+
+    if (normalized.contains('a terminal is required to read the password') ||
+        normalized.contains('a password is required')) {
+      if (!hasPassword) {
+        return 'Sudo requiere contraseña para instalar $packageName y esta conexión no tiene password. Recomendado: reconectar con password o configurar NOPASSWD para ese usuario.';
+      }
+      return 'Sudo rechazó la instalación de $packageName. Verifica permisos sudo del usuario y la política requiretty/NOPASSWD en el servidor.';
+    }
+
+    return output.isEmpty
+        ? 'Fallo al instalar $packageName (exit $exitCode)'
+        : output;
+  }
+
+  Future<({String output, int exitCode})> _executeCommandWithStatus(TempSession session, String command) async {
+    final wrappedCommand = '({ $command; }) 2>&1; echo "$_exitCodeMarker\$?"';
+    final raw = await session.sshService.runSingleCommand(wrappedCommand);
+    _commandHistoryManager.add(command);
+
+    final markerIndex = raw.lastIndexOf(_exitCodeMarker);
+    if (markerIndex == -1) {
+      return (output: raw.trim(), exitCode: 1);
+    }
+
+    final output = raw.substring(0, markerIndex).trim();
+    final exitCodeRaw = raw.substring(markerIndex + _exitCodeMarker.length).trim();
+    final exitCode = int.tryParse(exitCodeRaw) ?? 1;
+
+    return (output: output, exitCode: exitCode);
   }
 
   bool _looksLikeInstallFailure(String output) {
