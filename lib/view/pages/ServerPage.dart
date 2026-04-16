@@ -38,6 +38,7 @@ class _ServerPageState extends State<ServerPage> {
   Timer? _metricsTimer;
   late final ValueListenable<Map<String, AppInstallState>> _appInstallStatesListenable;
   Map<String, AppInstallState> _previousAppInstallStates = const {};
+  bool _appsStatusSyncRequested = false;
 
   String currentPath = "/";
   List<FlSpot> cpuPoints = [const FlSpot(0, 0)];
@@ -89,10 +90,18 @@ class _ServerPageState extends State<ServerPage> {
 
       if (currentState == AppInstallStatus.installing) {
         _showInstallSnackBar('$appName: instalando');
-      } else if (currentState == AppInstallStatus.success) {
+      } else if (currentState == AppInstallStatus.uninstalling) {
+        _showInstallSnackBar('$appName: eliminando');
+      } else if (currentState == AppInstallStatus.installed && previousState == AppInstallStatus.installing) {
         _showInstallSnackBar('$appName: instalación exitosa');
+      } else if (currentState == AppInstallStatus.idle && previousState == AppInstallStatus.uninstalling) {
+        _showInstallSnackBar('$appName: eliminación exitosa');
       } else if (currentState == AppInstallStatus.failure) {
-        _showInstallSnackBar('$appName: instalación fallida', isError: true);
+        if (previousState == AppInstallStatus.uninstalling) {
+          _showInstallSnackBar('$appName: eliminación fallida', isError: true);
+        } else {
+          _showInstallSnackBar('$appName: instalación fallida', isError: true);
+        }
       }
     }
 
@@ -459,6 +468,14 @@ void _handleTerminalInput(String input, SSHSession session) {
   }
 
   Widget _buildAppsManagerTab() {
+    if (!_appsStatusSyncRequested) {
+      _appsStatusSyncRequested = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        widget.serverController.refreshInstalledAppsInBackground(serverId: widget.serverConfig.id);
+      });
+    }
+
     return ValueListenableBuilder<Map<String, AppInstallState>>(
       valueListenable: widget.serverController.installStatesListenable(widget.serverConfig.id),
       builder: (context, states, _) {
@@ -481,7 +498,18 @@ void _handleTerminalInput(String input, SSHSession session) {
     required AppInstallState state,
   }) {
     final packageManager = (_activeServer?.packageManager ?? 'unknown').toLowerCase();
-    final canInstall = !state.isBusy && packageManager != 'unknown';
+    final canRunAction = !state.isBusy && packageManager != 'unknown';
+    final isInstalled = state.isInstalled;
+
+    final buttonLabel = state.status == AppInstallStatus.installing
+        ? 'Instalando...'
+        : state.status == AppInstallStatus.uninstalling
+            ? 'Eliminando...'
+            : isInstalled
+                ? 'Eliminar'
+                : 'Instalar';
+
+    final buttonColor = isInstalled ? AppColors.error : AppColors.primary;
 
     return Container(
       padding: const EdgeInsets.all(14),
@@ -526,22 +554,30 @@ void _handleTerminalInput(String input, SSHSession session) {
           ),
           const SizedBox(width: 10),
           ElevatedButton(
-            onPressed: canInstall
+            onPressed: canRunAction
                 ? () {
-                    widget.serverController.installAppInBackground(
-                      serverId: widget.serverConfig.id,
-                      appId: app.id,
-                      packageName: app.packageName,
-                    );
+                    if (isInstalled) {
+                      widget.serverController.uninstallAppInBackground(
+                        serverId: widget.serverConfig.id,
+                        appId: app.id,
+                        packageName: app.packageName,
+                      );
+                    } else {
+                      widget.serverController.installAppInBackground(
+                        serverId: widget.serverConfig.id,
+                        appId: app.id,
+                        packageName: app.packageName,
+                      );
+                    }
                   }
                 : null,
             style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primary,
+              backgroundColor: buttonColor,
               disabledBackgroundColor: AppColors.border,
               foregroundColor: AppColors.textPrimary,
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             ),
-            child: Text(state.isBusy ? 'Instalando...' : 'Instalar'),
+            child: Text(buttonLabel),
           ),
         ],
       ),
@@ -557,13 +593,21 @@ void _handleTerminalInput(String input, SSHSession session) {
         label = 'Instalando';
         color = Colors.amber;
         break;
-      case AppInstallStatus.success:
-        label = 'Exito';
+      case AppInstallStatus.uninstalling:
+        label = 'Eliminando';
+        color = Colors.orange;
+        break;
+      case AppInstallStatus.installed:
+        label = 'Instalada';
         color = AppColors.success;
         break;
       case AppInstallStatus.failure:
         label = 'Fallo';
         color = AppColors.error;
+        break;
+      case AppInstallStatus.success:
+        label = 'Exito';
+        color = AppColors.success;
         break;
       case AppInstallStatus.idle:
         label = 'Listo';

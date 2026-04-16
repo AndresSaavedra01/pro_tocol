@@ -21,6 +21,29 @@ void main() {
       expect(state.isBusy, isTrue);
       expect(state.hasSucceeded, isFalse);
       expect(state.hasFailed, isFalse);
+      expect(state.isInstalled, isFalse);
+    });
+
+    test('uninstalling state carries message and is busy', () {
+      const state = AppInstallState.uninstalling('Eliminando git');
+
+      expect(state.status, AppInstallStatus.uninstalling);
+      expect(state.message, 'Eliminando git');
+      expect(state.isBusy, isTrue);
+      expect(state.hasSucceeded, isFalse);
+      expect(state.hasFailed, isFalse);
+      expect(state.isInstalled, isFalse);
+    });
+
+    test('installed state is marked as installed', () {
+      const state = AppInstallState.installed('Ya instalado');
+
+      expect(state.status, AppInstallStatus.installed);
+      expect(state.message, 'Ya instalado');
+      expect(state.isBusy, isFalse);
+      expect(state.hasSucceeded, isFalse);
+      expect(state.hasFailed, isFalse);
+      expect(state.isInstalled, isTrue);
     });
 
     test('success state is marked as succeeded', () {
@@ -31,6 +54,7 @@ void main() {
       expect(state.isBusy, isFalse);
       expect(state.hasSucceeded, isTrue);
       expect(state.hasFailed, isFalse);
+      expect(state.isInstalled, isFalse);
     });
 
     test('failure state is marked as failed', () {
@@ -41,6 +65,7 @@ void main() {
       expect(state.isBusy, isFalse);
       expect(state.hasSucceeded, isFalse);
       expect(state.hasFailed, isTrue);
+      expect(state.isInstalled, isFalse);
     });
   });
 }

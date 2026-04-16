@@ -3,6 +3,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import 'package:pro_tocol/logic/apps_manager_catalog.dart';
 import 'package:pro_tocol/logic/apps_manager_state.dart';
 import 'package:pro_tocol/model/entities/TempSession.dart';
 import 'package:pro_tocol/model/entities/TempSessionConfig.dart';
@@ -53,6 +54,8 @@ class TempSessionController {
       _activeSessions[host] = session;
 
       await _detectLinuxDistro(session);
+
+      refreshInstalledAppsInBackground(host: host);
 
       return session;
     } catch (e) {
@@ -181,6 +184,48 @@ class TempSessionController {
     );
   }
 
+  /// Inicia una desinstalación sin bloquear la UI.
+  void uninstallAppInBackground({
+    required String host,
+    required String appId,
+    required String packageName,
+  }) {
+    final session = _getValidSession(host);
+    final packageManager = (session.packageManager ?? 'unknown').toLowerCase();
+
+    _setInstallState(
+      host,
+      appId,
+      AppInstallState.uninstalling('Eliminando $packageName...'),
+    );
+
+    unawaited(
+      _runAppUninstall(
+        host: host,
+        appId: appId,
+        packageName: packageName,
+        packageManager: packageManager,
+      ),
+    );
+  }
+
+  /// Sincroniza en segundo plano si cada app del catálogo está instalada.
+  void refreshInstalledAppsInBackground({required String host}) {
+    final session = _getValidSession(host);
+    final packageManager = (session.packageManager ?? 'unknown').toLowerCase();
+
+    if (!PackageInstallCommandBuilder.supportedPackageManagers.contains(packageManager)) {
+      return;
+    }
+
+    unawaited(
+      _syncInstalledApps(
+        host: host,
+        packageManager: packageManager,
+      ),
+    );
+  }
+
   AppInstallState getInstallState(String host, String appId) {
     return _appInstallStates[host]?[appId] ?? const AppInstallState.idle();
   }
@@ -226,20 +271,101 @@ class TempSessionController {
       }
 
       if (result.exitCode != 0 || _looksLikeInstallFailure(result.output)) {
-        final errorMessage = _buildInstallFailureMessage(
+        final errorMessage = _buildPackageCommandFailureMessage(
           output: result.output,
           packageName: packageName,
           exitCode: result.exitCode,
           hasPassword: (session.config.password ?? '').trim().isNotEmpty,
+          action: 'instalar',
         );
         _setInstallState(host, appId, AppInstallState.failure(errorMessage));
         return;
       }
 
-      _setInstallState(host, appId, AppInstallState.success('Instalacion completada: $packageName'));
+      _setInstallState(host, appId, AppInstallState.installed('Instalada: $packageName'));
     } catch (e) {
       _setInstallState(host, appId, AppInstallState.failure(e.toString()));
     }
+  }
+
+  Future<void> _runAppUninstall({
+    required String host,
+    required String appId,
+    required String packageName,
+    required String packageManager,
+  }) async {
+    try {
+      final session = _getValidSession(host);
+      final command = PackageInstallCommandBuilder.buildUninstallCommand(
+        packageManager: packageManager,
+        packageName: packageName,
+      );
+      final commandWithSudoHandling = _withSudoPasswordIfAvailable(
+        command,
+        session.config.password,
+      );
+
+      final result = await _executeCommandWithStatus(session, commandWithSudoHandling);
+
+      if (result.exitCode != 0 || _looksLikeInstallFailure(result.output)) {
+        final errorMessage = _buildPackageCommandFailureMessage(
+          output: result.output,
+          packageName: packageName,
+          exitCode: result.exitCode,
+          hasPassword: (session.config.password ?? '').trim().isNotEmpty,
+          action: 'eliminar',
+        );
+        _setInstallState(host, appId, AppInstallState.failure(errorMessage));
+        return;
+      }
+
+      _setInstallState(host, appId, const AppInstallState.idle());
+    } catch (e) {
+      _setInstallState(host, appId, AppInstallState.failure(e.toString()));
+    }
+  }
+
+  Future<void> _syncInstalledApps({
+    required String host,
+    required String packageManager,
+  }) async {
+    final session = _getValidSession(host);
+
+    for (final app in AppsManagerCatalog.commonApps) {
+      final currentState = getInstallState(host, app.id);
+      if (currentState.isBusy) {
+        continue;
+      }
+
+      final isInstalled = await _isAppInstalled(
+        session: session,
+        packageManager: packageManager,
+        packageName: app.packageName,
+      );
+
+      if (isInstalled) {
+        _setInstallState(host, app.id, AppInstallState.installed('Instalada: ${app.packageName}'));
+      } else {
+        _setInstallState(host, app.id, const AppInstallState.idle());
+      }
+    }
+  }
+
+  Future<bool> _isAppInstalled({
+    required TempSession session,
+    required String packageManager,
+    required String packageName,
+  }) async {
+    final command = PackageInstallCommandBuilder.buildCheckInstalledCommand(
+      packageManager: packageManager,
+      packageName: packageName,
+    );
+    final result = await _executeCommandWithStatus(
+      session,
+      command,
+      addToHistory: false,
+    );
+    return result.exitCode == 0;
   }
 
   String _withSudoPasswordIfAvailable(String command, String? password) {
@@ -257,31 +383,38 @@ class TempSessionController {
     return value.replaceAll("'", "'\"'\"'");
   }
 
-  String _buildInstallFailureMessage({
+  String _buildPackageCommandFailureMessage({
     required String output,
     required String packageName,
     required int exitCode,
     required bool hasPassword,
+    required String action,
   }) {
     final normalized = output.toLowerCase();
 
     if (normalized.contains('a terminal is required to read the password') ||
         normalized.contains('a password is required')) {
       if (!hasPassword) {
-        return 'Sudo requiere contraseña para instalar $packageName y esta conexión no tiene password. Recomendado: reconectar con password o configurar NOPASSWD para ese usuario.';
+        return 'Sudo requiere contraseña para $action $packageName y esta conexión no tiene password. Recomendado: reconectar con password o configurar NOPASSWD para ese usuario.';
       }
-      return 'Sudo rechazó la instalación de $packageName. Verifica permisos sudo del usuario y la política requiretty/NOPASSWD en el servidor.';
+      return 'Sudo rechazó la operación para $action $packageName. Verifica permisos sudo del usuario y la política requiretty/NOPASSWD en el servidor.';
     }
 
     return output.isEmpty
-        ? 'Fallo al instalar $packageName (exit $exitCode)'
+        ? 'Fallo al $action $packageName (exit $exitCode)'
         : output;
   }
 
-  Future<({String output, int exitCode})> _executeCommandWithStatus(TempSession session, String command) async {
+  Future<({String output, int exitCode})> _executeCommandWithStatus(
+    TempSession session,
+    String command, {
+    bool addToHistory = true,
+  }) async {
     final wrappedCommand = '({ $command; }) 2>&1; echo "$_exitCodeMarker\$?"';
     final raw = await session.sshService.runSingleCommand(wrappedCommand);
-    _commandHistoryManager.add(command);
+    if (addToHistory) {
+      _commandHistoryManager.add(command);
+    }
 
     final markerIndex = raw.lastIndexOf(_exitCodeMarker);
     if (markerIndex == -1) {

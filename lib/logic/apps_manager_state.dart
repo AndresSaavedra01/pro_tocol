@@ -1,6 +1,8 @@
 enum AppInstallStatus {
   idle,
   installing,
+  uninstalling,
+  installed,
   success,
   failure,
 }
@@ -22,6 +24,14 @@ class AppInstallState {
       : status = AppInstallStatus.installing,
         message = message;
 
+  const AppInstallState.uninstalling([String? message])
+      : status = AppInstallStatus.uninstalling,
+        message = message;
+
+  const AppInstallState.installed([String? message])
+      : status = AppInstallStatus.installed,
+        message = message;
+
   const AppInstallState.success([String? message])
       : status = AppInstallStatus.success,
         message = message;
@@ -30,7 +40,9 @@ class AppInstallState {
       : status = AppInstallStatus.failure,
         message = message;
 
-  bool get isBusy => status == AppInstallStatus.installing;
+  bool get isBusy =>
+      status == AppInstallStatus.installing || status == AppInstallStatus.uninstalling;
+  bool get isInstalled => status == AppInstallStatus.installed;
   bool get hasSucceeded => status == AppInstallStatus.success;
   bool get hasFailed => status == AppInstallStatus.failure;
 }
