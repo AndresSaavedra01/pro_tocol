@@ -1,10 +1,14 @@
 
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
+import 'package:pro_tocol/logic/apps_manager_state.dart';
 import 'package:pro_tocol/model/entities/TempSession.dart';
 import 'package:pro_tocol/model/entities/TempSessionConfig.dart';
 import 'package:pro_tocol/model/repositories/TempSessionRepository.dart';
 import 'package:pro_tocol/logic/command_history_manager.dart';
+import 'package:pro_tocol/logic/package_install_command_builder.dart';
 
 class TempSessionController {
   final TempSessionRepository _repository;
@@ -12,6 +16,8 @@ class TempSessionController {
 
   // Mapa para gestionar las sesiones activas en ejecución (Key: un ID único generado en RAM)
   final Map<String, TempSession> _activeSessions = {};
+  final Map<String, Map<String, AppInstallState>> _appInstallStates = {};
+  final Map<String, ValueNotifier<Map<String, AppInstallState>>> _appInstallNotifiers = {};
 
   TempSessionController(this._repository, this._commandHistoryManager);
 
@@ -83,7 +89,7 @@ class TempSessionController {
         return;
       }
 
-      session.distroName = name ?? id ?? 'Linux';
+      session.distroName = name ?? id;
       session.packageManager = _resolvePackageManager(id, idLike);
       debugPrint('[TempSessionController] Distro detected: ${session.distroName} (PM: ${session.packageManager})');
     } catch (e) {
@@ -135,6 +141,10 @@ class TempSessionController {
       await _repository.removeTempSession(session);
       _activeSessions.remove(host);
     }
+
+    _appInstallStates.remove(host);
+    final notifier = _appInstallNotifiers.remove(host);
+    notifier?.dispose();
   }
 
 
@@ -143,6 +153,93 @@ class TempSessionController {
     final result = await session.sshService.runSingleCommand(command);
     _commandHistoryManager.add(command);
     return result;
+  }
+
+  /// Inicia una instalación sin bloquear la UI.
+  void installAppInBackground({
+    required String host,
+    required String appId,
+    required String packageName,
+  }) {
+    final session = _getValidSession(host);
+    final packageManager = (session.packageManager ?? 'unknown').toLowerCase();
+
+    _setInstallState(
+      host,
+      appId,
+      AppInstallState.installing('Instalando $packageName...'),
+    );
+
+    unawaited(
+      _runAppInstall(
+        host: host,
+        appId: appId,
+        packageName: packageName,
+        packageManager: packageManager,
+      ),
+    );
+  }
+
+  AppInstallState getInstallState(String host, String appId) {
+    return _appInstallStates[host]?[appId] ?? const AppInstallState.idle();
+  }
+
+  Map<String, AppInstallState> getInstallStates(String host) {
+    return Map.unmodifiable(_appInstallStates[host] ?? {});
+  }
+
+  ValueListenable<Map<String, AppInstallState>> installStatesListenable(String host) {
+    return _appInstallNotifiers.putIfAbsent(
+      host,
+      () => ValueNotifier<Map<String, AppInstallState>>(Map.unmodifiable(_appInstallStates[host] ?? {})),
+    );
+  }
+
+  Future<void> _runAppInstall({
+    required String host,
+    required String appId,
+    required String packageName,
+    required String packageManager,
+  }) async {
+    try {
+      final command = PackageInstallCommandBuilder.buildInstallCommand(
+        packageManager: packageManager,
+        packageName: packageName,
+      );
+
+      final output = await runCommand(host, command);
+
+      if (_looksLikeInstallFailure(output)) {
+        _setInstallState(host, appId, AppInstallState.failure(output.isEmpty ? 'Fallo desconocido' : output));
+        return;
+      }
+
+      _setInstallState(host, appId, AppInstallState.success('Instalacion completada: $packageName'));
+    } catch (e) {
+      _setInstallState(host, appId, AppInstallState.failure(e.toString()));
+    }
+  }
+
+  bool _looksLikeInstallFailure(String output) {
+    final normalized = output.toLowerCase();
+    return normalized.contains('error') ||
+        normalized.contains('failed') ||
+        normalized.contains('unable to locate package') ||
+        normalized.contains('no se pudo') ||
+        normalized.contains('permission denied') ||
+        normalized.contains('not found');
+  }
+
+  void _setInstallState(String host, String appId, AppInstallState state) {
+    final next = Map<String, AppInstallState>.from(_appInstallStates[host] ?? {});
+    next[appId] = state;
+    _appInstallStates[host] = next;
+
+    final notifier = _appInstallNotifiers.putIfAbsent(
+      host,
+      () => ValueNotifier<Map<String, AppInstallState>>(const {}),
+    );
+    notifier.value = Map.unmodifiable(next);
   }
 
   /// Utilidad interna para asegurar que la sesión existe y está conectada

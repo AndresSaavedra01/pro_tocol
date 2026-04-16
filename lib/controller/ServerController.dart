@@ -1,10 +1,14 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:pro_tocol/model/entities/DataBaseEntities.dart';
 import 'package:pro_tocol/model/entities/Server.dart';
 import 'package:pro_tocol/model/repositories/ServerRepository.dart';
 import 'package:pro_tocol/model/repositories/ProfileRepository.dart';
 import 'package:pro_tocol/model/entities/ServerMetrics.dart';
+import 'package:pro_tocol/logic/apps_manager_state.dart';
 import 'package:pro_tocol/logic/command_history_manager.dart';
+import 'package:pro_tocol/logic/package_install_command_builder.dart';
 
 class ServerController {
   final ServerRepository _serverRepository;
@@ -13,6 +17,8 @@ class ServerController {
 
   // MAPA VITAL: Mantiene vivas las conexiones. La llave es el ID del ServerConfig.
   final Map<int, Server> _activeConnections = {};
+  final Map<int, Map<String, AppInstallState>> _appInstallStates = {};
+  final Map<int, ValueNotifier<Map<String, AppInstallState>>> _appInstallNotifiers = {};
 
   ServerController(this._serverRepository, this._profileRepository, this._commandHistoryManager);
 
@@ -104,7 +110,7 @@ class ServerController {
         return;
       }
 
-      server.distroName = name ?? id ?? 'Linux';
+      server.distroName = name ?? id;
       server.packageManager = _resolvePackageManager(id, idLike);
       debugPrint('[ServerController] Distro detected: ${server.distroName} (PM: ${server.packageManager})');
     } catch (e) {
@@ -154,6 +160,10 @@ class ServerController {
       _activeConnections[serverId]!.sshService.disconnect();
       _activeConnections.remove(serverId);
     }
+
+    _appInstallStates.remove(serverId);
+    final notifier = _appInstallNotifiers.remove(serverId);
+    notifier?.dispose();
   }
 
   /// 3. EJECUCIÓN DE SERVICIOS
@@ -167,6 +177,93 @@ class ServerController {
     final result = await server.sshService.runSingleCommand(command);
     _commandHistoryManager.add(command);
     return result;
+  }
+
+  /// Inicia una instalación sin bloquear la UI.
+  void installAppInBackground({
+    required int serverId,
+    required String appId,
+    required String packageName,
+  }) {
+    final server = getActiveServer(serverId);
+    final packageManager = (server.packageManager ?? 'unknown').toLowerCase();
+
+    _setInstallState(
+      serverId,
+      appId,
+      AppInstallState.installing('Instalando $packageName...'),
+    );
+
+    unawaited(
+      _runAppInstall(
+        serverId: serverId,
+        appId: appId,
+        packageName: packageName,
+        packageManager: packageManager,
+      ),
+    );
+  }
+
+  AppInstallState getInstallState(int serverId, String appId) {
+    return _appInstallStates[serverId]?[appId] ?? const AppInstallState.idle();
+  }
+
+  Map<String, AppInstallState> getInstallStates(int serverId) {
+    return Map.unmodifiable(_appInstallStates[serverId] ?? {});
+  }
+
+  ValueListenable<Map<String, AppInstallState>> installStatesListenable(int serverId) {
+    return _appInstallNotifiers.putIfAbsent(
+      serverId,
+      () => ValueNotifier<Map<String, AppInstallState>>(Map.unmodifiable(_appInstallStates[serverId] ?? {})),
+    );
+  }
+
+  Future<void> _runAppInstall({
+    required int serverId,
+    required String appId,
+    required String packageName,
+    required String packageManager,
+  }) async {
+    try {
+      final command = PackageInstallCommandBuilder.buildInstallCommand(
+        packageManager: packageManager,
+        packageName: packageName,
+      );
+
+      final output = await executeCommand(serverId, command);
+
+      if (_looksLikeInstallFailure(output)) {
+        _setInstallState(serverId, appId, AppInstallState.failure(output.isEmpty ? 'Fallo desconocido' : output));
+        return;
+      }
+
+      _setInstallState(serverId, appId, AppInstallState.success('Instalacion completada: $packageName'));
+    } catch (e) {
+      _setInstallState(serverId, appId, AppInstallState.failure(e.toString()));
+    }
+  }
+
+  bool _looksLikeInstallFailure(String output) {
+    final normalized = output.toLowerCase();
+    return normalized.contains('error') ||
+        normalized.contains('failed') ||
+        normalized.contains('unable to locate package') ||
+        normalized.contains('no se pudo') ||
+        normalized.contains('permission denied') ||
+        normalized.contains('not found');
+  }
+
+  void _setInstallState(int serverId, String appId, AppInstallState state) {
+    final next = Map<String, AppInstallState>.from(_appInstallStates[serverId] ?? {});
+    next[appId] = state;
+    _appInstallStates[serverId] = next;
+
+    final notifier = _appInstallNotifiers.putIfAbsent(
+      serverId,
+      () => ValueNotifier<Map<String, AppInstallState>>(const {}),
+    );
+    notifier.value = Map.unmodifiable(next);
   }
 
   /// Utilidad interna para asegurar que operamos sobre un servidor activo
