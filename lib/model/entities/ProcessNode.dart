@@ -17,7 +17,7 @@ class ProcessNode {
     required this.status,
   });
 
-  /// Parsea una línea del comando:
+  /// Parsea una línea del comando
   /// ps aux --sort=-%cpu | awk 'NR>1 {printf "%s|%s|%s|%s|%s|%s\n",$1,$2,$3,$4,$6,$11}'
   /// Formato: USER|PID|%CPU|%MEM|RSS_KB|COMMAND
   factory ProcessNode.fromRawLine(String line) {
