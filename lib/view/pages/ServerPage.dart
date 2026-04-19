@@ -5,7 +5,6 @@ import 'package:dartssh2/dartssh2.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:xterm/xterm.dart';
-import 'package:fl_chart/fl_chart.dart';
 import 'package:pro_tocol/logic/apps_manager_catalog.dart';
 import 'package:pro_tocol/logic/apps_manager_state.dart';
 
@@ -13,6 +12,8 @@ import 'package:pro_tocol/controller/ServerController.dart';
 import 'package:pro_tocol/model/entities/DataBaseEntities.dart';
 import 'package:pro_tocol/model/entities/FileNode.dart';
 import 'package:pro_tocol/model/entities/Server.dart';
+import 'package:pro_tocol/model/entities/ProcessNode.dart';
+import 'package:pro_tocol/model/entities/ServerMetrics.dart';
 
 import '../theme/AppColors.dart';
 
@@ -35,7 +36,8 @@ class ServerPage extends StatefulWidget {
 class _ServerPageState extends State<ServerPage> {
   late final Terminal terminal;
   Server? _activeServer;
-  Timer? _metricsTimer;
+  Timer? _monitorTimer;
+
   late final ValueListenable<Map<String, AppInstallState>> _appInstallStatesListenable;
   late final ValueListenable<List<ManagedApp>> _appsSearchResultsListenable;
   Map<String, AppInstallState> _previousAppInstallStates = const {};
@@ -46,25 +48,30 @@ class _ServerPageState extends State<ServerPage> {
   bool _isAppsSearchInProgress = false;
   int _searchRequestId = 0;
 
+  // Monitor state
+  ServerMetrics? _metrics;
+  List<ProcessNode> _processes = [];
+  bool _isMonitorFetching = false;   
+  String _downloadSpeed = '—';
+  String _uploadSpeed   = '—';
+  String _ipv4          = '—';
+
+  // Files
   String currentPath = "/";
-  List<FlSpot> cpuPoints = [const FlSpot(0, 0)];
-  List<FlSpot> ramPoints = [const FlSpot(0, 0)];
   List<FileNode> currentFiles = [];
   bool _isLoadingFiles = false;
-  List<FlSpot> diskPoints = [const FlSpot(0, 0)];
-  String _rawDiskInfo = "0%";
-  int _totalRamMb = 0;
-  int _usedRamMb = 0;
 
-  // Historial de comandos
+  // Terminal
   String _currentCommandBuffer = "";
 
   @override
   void initState() {
     super.initState();
     terminal = Terminal(maxLines: 10000);
-    _appInstallStatesListenable = widget.serverController.installStatesListenable(widget.serverConfig.id);
-    _appsSearchResultsListenable = widget.serverController.searchResultsListenable(widget.serverConfig.id);
+    _appInstallStatesListenable =
+        widget.serverController.installStatesListenable(widget.serverConfig.id);
+    _appsSearchResultsListenable =
+        widget.serverController.searchResultsListenable(widget.serverConfig.id);
     _previousAppInstallStates = Map<String, AppInstallState>.from(
       widget.serverController.getInstallStates(widget.serverConfig.id),
     );
@@ -74,258 +81,225 @@ class _ServerPageState extends State<ServerPage> {
 
   @override
   void dispose() {
-    _metricsTimer?.cancel();
+    _monitorTimer?.cancel();
     _appInstallStatesListenable.removeListener(_handleAppInstallStateChanged);
     _appsSearchDebounce?.cancel();
     _appsSearchController.dispose();
     super.dispose();
   }
 
-  void _handleAppInstallStateChanged() {
-    if (!mounted) return;
-
-    final currentStates = Map<String, AppInstallState>.from(_appInstallStatesListenable.value);
-
-    for (final entry in currentStates.entries) {
-      final previousState = _previousAppInstallStates[entry.key]?.status;
-      final currentState = entry.value.status;
-
-      if (previousState == currentState) {
-        continue;
-      }
-
-      final app = AppsManagerCatalog.byId(entry.key);
-      final appName = app?.displayName ?? entry.key;
-
-      if (currentState == AppInstallStatus.installing) {
-        _showInstallSnackBar('$appName: instalando');
-      } else if (currentState == AppInstallStatus.uninstalling) {
-        _showInstallSnackBar('$appName: eliminando');
-      } else if (currentState == AppInstallStatus.installed && previousState == AppInstallStatus.installing) {
-        _showInstallSnackBar('$appName: instalación exitosa');
-      } else if (currentState == AppInstallStatus.idle && previousState == AppInstallStatus.uninstalling) {
-        _showInstallSnackBar('$appName: eliminación exitosa');
-      } else if (currentState == AppInstallStatus.failure) {
-        if (previousState == AppInstallStatus.uninstalling) {
-          _showInstallSnackBar('$appName: eliminación fallida', isError: true);
-        } else {
-          _showInstallSnackBar('$appName: instalación fallida', isError: true);
-        }
-      }
-    }
-
-    _previousAppInstallStates = currentStates;
-  }
-
-  void _showInstallSnackBar(String message, {bool isError = false}) {
-    final messenger = ScaffoldMessenger.maybeOf(context);
-    if (messenger == null) return;
-
-    messenger.hideCurrentSnackBar();
-    messenger.showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: isError ? AppColors.error : AppColors.surface,
-      ),
-    );
-  }
+  // CONEXION
 
   Future<void> _connectToServerController() async {
     try {
-      // 1. Obtenemos el servidor del controlador
       _activeServer = widget.serverController.getActiveServer(widget.serverConfig.id);
 
-      // 2. Iniciamos la sesión con un tamaño base
       final session = await _activeServer!.sshService.createTerminal(
-        width: terminal.viewWidth > 0 ? terminal.viewWidth : 80,
+        width:  terminal.viewWidth  > 0 ? terminal.viewWidth  : 80,
         height: terminal.viewHeight > 0 ? terminal.viewHeight : 24,
       );
 
-      // 3. Listener para cambios dinámicos de tamaño
-      terminal.onResize = (width, height, cursorWidth, cursorHeight) {
-        if (width > 0 && height > 0) {
-          session.resizeTerminal(width, height);
-        }
+      terminal.onResize = (w, h, cw, ch) {
+        if (w > 0 && h > 0) session.resizeTerminal(w, h);
       };
 
-      // --- SOLUCIÓN UNIVERSAL PARA EL CURSOR (SM-A315G) ---
       _startUniversalSync(session);
 
-      // 4. Conectamos los flujos de la terminal
-      session.stdout.listen((data) {
-        if (mounted) terminal.write(utf8.decode(data, allowMalformed: true));
+      session.stdout.listen((d) {
+        if (mounted) terminal.write(utf8.decode(d, allowMalformed: true));
       });
-
-      session.stderr.listen((data) {
-        if (mounted) terminal.write(utf8.decode(data, allowMalformed: true));
+      session.stderr.listen((d) {
+        if (mounted) terminal.write(utf8.decode(d, allowMalformed: true));
       });
+      terminal.onOutput = (input) => _handleTerminalInput(input, session);
 
-      terminal.onOutput = (input) {
-        _handleTerminalInput(input, session);
-      };
-
-      // Limpiamos la pantalla y notificamos éxito
       terminal.write('\x1Bc');
-      terminal.write('\x1B[32mConexión y sincronización establecidas.\x1B[0m\r\n\n');
-      terminal.write('\x1B[32mHistorial de comandos activado (↑/↓ para navegar).\x1B[0m\r\n\n');
+      terminal.write('\x1B[32mConexión establecida.\x1B[0m\r\n\n');
 
-      // --- ACTIVACIÓN DE MÉTODOS "OLVIDADOS" ---
-
-      // Cargamos los archivos por primera vez
       _refreshFiles();
 
-      // Iniciamos el Timer de métricas si no es una sesión temporal
       if (!widget.isTemporarySession) {
-        _listenToSystemStats();
+        // Primera carga inmediata
+        _refreshMonitorData();
+        // Timer cada 10s — el guard interno evita solapamiento
+        _monitorTimer = Timer.periodic(const Duration(seconds: 10), (_) {
+          if (mounted) _refreshMonitorData();
+        });
       }
-
     } catch (e) {
-      if (mounted) {
-        terminal.write('\x1B[31mError al sincronizar consola: $e\x1B[0m\r\n');
-      }
+      if (mounted) terminal.write('\x1B[31mError: $e\x1B[0m\r\n');
     }
   }
-void _handleTerminalInput(String input, SSHSession session) {
-    // Detectar teclas de flecha para navegación del historial
-    if (input == '\x1B[A') { // Flecha arriba
-      final previousCommand = widget.serverController.commandHistoryManager.previous();
-      if (previousCommand != null) {
-        _updateCommandBuffer(previousCommand);
-      }
+
+  // MONITOR 
+
+  Future<void> _refreshMonitorData() async {
+    if (_activeServer == null || !_activeServer!.sshService.isConnected) return;
+    // Solo bloquea si YA está en curso (evita llamadas paralelas)
+    if (_isMonitorFetching) return;
+
+    _isMonitorFetching = true;
+    // Mostramos indicador solo si no hay datos previos
+    if (_metrics == null && mounted) setState(() {});
+
+    try {
+      // Metricas + procesos en paralelo
+      final metricsFuture   = _activeServer!.sshService.fetchMetrics();
+      final processesFuture = _activeServer!.sshService.fetchProcesses();
+      final netFuture       = _activeServer!.sshService.fetchNetworkStats();
+
+      final results = await Future.wait([metricsFuture, processesFuture, netFuture]);
+
+      if (!mounted) return;
+
+      final metrics = results[0] as ServerMetrics;
+      final procs   = results[1] as List<ProcessNode>;
+      final net     = results[2] as Map<String, String>;
+
+      setState(() {
+        _metrics       = metrics;
+        _processes     = procs;
+        _downloadSpeed = net['download'] ?? '—';
+        _uploadSpeed   = net['upload']   ?? '—';
+        _ipv4          = net['ipv4']     ?? '—';
+      });
+    } catch (e) {
+      debugPrint("Error monitor: $e");
+    } finally {
+      _isMonitorFetching = false;
+    }
+  }
+
+  // TERMINAL
+
+  void _handleTerminalInput(String input, SSHSession session) {
+    if (input == '\x1B[A') {
+      final cmd = widget.serverController.commandHistoryManager.previous();
+      if (cmd != null) _updateCommandBuffer(cmd);
       return;
-    } else if (input == '\x1B[B') { // Flecha abajo
-      final nextCommand = widget.serverController.commandHistoryManager.next();
-      if (nextCommand != null) {
-        _updateCommandBuffer(nextCommand);
-      } else {
-        _clearCommandBuffer();
-      }
+    } else if (input == '\x1B[B') {
+      final cmd = widget.serverController.commandHistoryManager.next();
+      if (cmd != null) { _updateCommandBuffer(cmd); } else { _clearCommandBuffer(); }
       return;
-    } else if (input == '\r' || input == '\n') { // Enter
+    } else if (input == '\r' || input == '\n') {
       if (_currentCommandBuffer.isNotEmpty) {
-        // Ejecutar comando
         session.stdin.add(utf8.encode(_currentCommandBuffer + '\n'));
         _currentCommandBuffer = "";
       } else {
-        // Solo enviar enter
         session.stdin.add(utf8.encode(input));
       }
       return;
-    } else if (input == '\x7F' || input == '\b') { // Backspace
+    } else if (input == '\x7F' || input == '\b') {
       if (_currentCommandBuffer.isNotEmpty) {
-        _currentCommandBuffer = _currentCommandBuffer.substring(0, _currentCommandBuffer.length - 1);
-        // Retroceder cursor y borrar carácter
+        _currentCommandBuffer =
+            _currentCommandBuffer.substring(0, _currentCommandBuffer.length - 1);
         terminal.write('\b \b');
         return;
       }
-    } else if (input.length == 1 && input.codeUnitAt(0) >= 32) { // Carácter imprimible
+    } else if (input.length == 1 && input.codeUnitAt(0) >= 32) {
       _currentCommandBuffer += input;
       terminal.write(input);
       return;
     }
-
-    // Para otros inputs (Ctrl+C, etc.), enviar directamente
     session.stdin.add(utf8.encode(input));
   }
 
   void _updateCommandBuffer(String command) {
-    // Limpiar línea actual
-    for (int i = 0; i < _currentCommandBuffer.length; i++) {
-      terminal.write('\b \b');
-    }
-    // Escribir nuevo comando
+    for (int i = 0; i < _currentCommandBuffer.length; i++) terminal.write('\b \b');
     _currentCommandBuffer = command;
     terminal.write(command);
   }
 
   void _clearCommandBuffer() {
-    // Limpiar linea actual
-    for (int i = 0; i < _currentCommandBuffer.length; i++) {
-      terminal.write('\b \b');
-    }
+    for (int i = 0; i < _currentCommandBuffer.length; i++) terminal.write('\b \b');
     _currentCommandBuffer = "";
-  } 
+  }
+
   void _startUniversalSync(SSHSession session) {
     int attempts = 0;
     Timer.periodic(const Duration(milliseconds: 300), (timer) async {
       attempts++;
-
       if (mounted && terminal.viewWidth > 0) {
-        // Sincronizamos el protocolo PTY
         session.resizeTerminal(terminal.viewWidth, terminal.viewHeight);
-
-        // Reforzamos el driver de terminal en el servidor
         await _activeServer!.sshService.runSingleCommand(
-            "stty cols ${terminal.viewWidth} rows ${terminal.viewHeight}"
-        );
-
-        // Con 3 intentos suele ser suficiente para capturar el tamaño final tras el renderizado
+            "stty cols ${terminal.viewWidth} rows ${terminal.viewHeight}");
         if (attempts >= 3) timer.cancel();
       }
-
       if (attempts > 10) timer.cancel();
     });
   }
 
-  void _listenToSystemStats() {
-    _metricsTimer = Timer.periodic(const Duration(seconds: 3), (timer) async {
-      try {
-        if (_activeServer != null && _activeServer!.sshService.isConnected) {
-          final metrics = await _activeServer!.sshService.fetchMetrics();
-          if (mounted) {
-            setState(() {
-              double x = cpuPoints.length.toDouble();
-              cpuPoints.add(FlSpot(x, metrics.cpuUsage));
-              _totalRamMb = metrics.totalRam;
-              _usedRamMb = metrics.usedRam;
-              double ramPercent = (_usedRamMb / _totalRamMb) * 100;
-              ramPoints.add(FlSpot(x, ramPercent));
-              _rawDiskInfo = metrics.diskUsage;
-              double diskVal = double.tryParse(_rawDiskInfo.replaceAll('%', '')) ?? 0;
-              diskPoints.add(FlSpot(x, diskVal));
+  // APPS MANAGER HANDLERS
 
-              if (cpuPoints.length > 15) {
-                cpuPoints.removeAt(0);
-                ramPoints.removeAt(0);
-                diskPoints.removeAt(0);
-              }
-            });
-          }
-        }
-      } catch (e) {
-        debugPrint("Error en métricas: $e");
-      }
-    });
+  void _handleAppInstallStateChanged() {
+    if (!mounted) return;
+    final current = Map<String, AppInstallState>.from(_appInstallStatesListenable.value);
+    for (final entry in current.entries) {
+      final prev = _previousAppInstallStates[entry.key]?.status;
+      final cur  = entry.value.status;
+      if (prev == cur) continue;
+      final app = AppsManagerCatalog.byId(entry.key);
+      final name = app?.displayName ?? entry.key;
+      if (cur == AppInstallStatus.installing)   _showSnackBar('$name: instalando');
+      else if (cur == AppInstallStatus.uninstalling) _showSnackBar('$name: eliminando');
+      else if (cur == AppInstallStatus.installed && prev == AppInstallStatus.installing)
+        _showSnackBar('$name: instalación exitosa');
+      else if (cur == AppInstallStatus.idle && prev == AppInstallStatus.uninstalling)
+        _showSnackBar('$name: eliminación exitosa');
+      else if (cur == AppInstallStatus.failure)
+        _showSnackBar(
+          prev == AppInstallStatus.uninstalling ? '$name: eliminación fallida' : '$name: instalación fallida',
+          isError: true,
+        );
+    }
+    _previousAppInstallStates = current;
   }
+
+  void _showSnackBar(String message, {bool isError = false}) {
+    final m = ScaffoldMessenger.maybeOf(context);
+    if (m == null) return;
+    m.hideCurrentSnackBar();
+    m.showSnackBar(SnackBar(
+      content: Text(message),
+      backgroundColor: isError ? AppColors.error : AppColors.surface,
+    ));
+  }
+
+  // ARCHIVOS
 
   Future<void> _refreshFiles() async {
     if (_activeServer?.sshService.sftp == null) return;
-
     setState(() => _isLoadingFiles = true);
     try {
       final files = await _activeServer!.sshService.sftp!.listDirectory(currentPath);
-      if (mounted) {
-        setState(() {
-          currentFiles = files;
-          _isLoadingFiles = false;
-        });
-      }
+      if (mounted) setState(() { currentFiles = files; _isLoadingFiles = false; });
     } catch (e) {
       if (mounted) {
         setState(() => _isLoadingFiles = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Error SFTP: $e"), backgroundColor: AppColors.error),
-        );
+        _showSnackBar("Error SFTP: $e", isError: true);
       }
     }
   }
 
+  void _goBack() {
+    if (currentPath == "/" || currentPath == "") return;
+    List<String> parts = currentPath.split('/');
+    if (parts.last.isEmpty) parts.removeLast();
+    if (parts.isNotEmpty) parts.removeLast();
+    String newPath = parts.join('/');
+    if (newPath.isEmpty) newPath = "/";
+    setState(() => currentPath = newPath);
+    _refreshFiles();
+  }
+
+  // BUILD
+
   @override
   Widget build(BuildContext context) {
-    final connectionString = "${widget.serverConfig.username}@${widget.serverConfig.host}";
-    final distroName = _activeServer?.distroName ?? 'Linux';
-    final packageManager = _activeServer?.packageManager ?? 'unknown';
-    final distroIcon = _getDistroIcon(distroName);
+    final connStr      = "${widget.serverConfig.username}@${widget.serverConfig.host}";
+    final distroName   = _activeServer?.distroName   ?? 'Linux';
+    final pkgManager   = _activeServer?.packageManager ?? 'unknown';
+    final distroIcon   = _getDistroIcon(distroName);
 
     return DefaultTabController(
       length: widget.isTemporarySession ? 1 : 4,
@@ -336,10 +310,10 @@ void _handleTerminalInput(String input, SSHSession session) {
           title: Column(
             children: [
               Text(
-                  widget.isTemporarySession ? 'Sesión Temporal' : widget.serverConfig.host,
-                  style: const TextStyle(color: AppColors.textPrimary, fontSize: 18, fontWeight: FontWeight.bold)
+                widget.isTemporarySession ? 'Sesión Temporal' : widget.serverConfig.host,
+                style: const TextStyle(color: AppColors.textPrimary, fontSize: 18, fontWeight: FontWeight.bold),
               ),
-              Text(connectionString, style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
+              Text(connStr, style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
               if (!widget.isTemporarySession) ...[
                 const SizedBox(height: 8),
                 Row(
@@ -347,18 +321,11 @@ void _handleTerminalInput(String input, SSHSession session) {
                   children: [
                     Text(distroIcon, style: const TextStyle(fontSize: 18)),
                     const SizedBox(width: 8),
-                    Column(
-                      children: [
-                        Text(
-                          distroName,
-                          style: const TextStyle(color: AppColors.textPrimary, fontSize: 14),
-                        ),
-                        Text(
-                          'Package Manager: $packageManager',
-                          style: const TextStyle(color: AppColors.textMuted, fontSize: 10),
-                        ),
-                      ],
-                    ),
+                    Column(children: [
+                      Text(distroName, style: const TextStyle(color: AppColors.textPrimary, fontSize: 14)),
+                      Text('Package Manager: $pkgManager',
+                          style: const TextStyle(color: AppColors.textMuted, fontSize: 10)),
+                    ]),
                   ],
                 ),
               ],
@@ -368,62 +335,395 @@ void _handleTerminalInput(String input, SSHSession session) {
           bottom: widget.isTemporarySession
               ? null
               : const TabBar(
-            indicatorColor: AppColors.primary,
-            labelColor: AppColors.textPrimary,
-            tabs: [
-              Tab(text: 'Estado'),
-              Tab(text: 'Terminal'),
-              Tab(text: 'Archivos'),
-              Tab(text: 'Apps Manager'),
-            ],
-          ),
+                  indicatorColor: AppColors.primary,
+                  labelColor: AppColors.textPrimary,
+                  tabs: [
+                    Tab(text: 'Monitoreo'),
+                    Tab(text: 'Terminal'),
+                    Tab(text: 'Archivos'),
+                    Tab(text: 'Apps Manager'),
+                  ],
+                ),
         ),
         body: widget.isTemporarySession
             ? _buildTerminalTab()
             : TabBarView(
-          physics: const NeverScrollableScrollPhysics(),
-          children: [
-            _buildEstadoTab(),
-            _buildTerminalTab(),
-            _buildArchivosTab(),
-            _buildAppsManagerTab(),
-          ],
-        ),
+                physics: const NeverScrollableScrollPhysics(),
+                children: [
+                  _buildMonitorTab(),
+                  _buildTerminalTab(),
+                  _buildArchivosTab(),
+                  _buildAppsManagerTab(),
+                ],
+              ),
       ),
     );
   }
 
-  Widget _buildEstadoTab() {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
+  
+  // PESTANA MONITOREO
+  
+
+  Widget _buildMonitorTab() {
+    final m        = _metrics;
+    final cpuVal   = m?.cpuUsage  ?? 0.0;
+    final usedRam  = m?.usedRam   ?? 0;
+    final totalRam = m?.totalRam  ?? 0;
+    final diskStr  = m?.diskUsage ?? '0%';
+    final diskVal  = double.tryParse(diskStr.replaceAll('%', '')) ?? 0.0;
+    final ramPct   = totalRam > 0 ? (usedRam / totalRam * 100) : 0.0;
+
+    return RefreshIndicator(
+      onRefresh: _refreshMonitorData,
+      child: ListView(
+        padding: const EdgeInsets.all(16),
         children: [
-          _buildGraphContainer("Uso de CPU", Colors.blue, cpuPoints),
-          _buildDetailLabel("Carga actual: ${cpuPoints.last.y.toStringAsFixed(1)}%"),
-          const SizedBox(height: 25),
+          // Barra de progreso tenue mientras carga (sin bloquear la UI)
+          if (_isMonitorFetching && _metrics == null)
+            const Padding(
+              padding: EdgeInsets.only(bottom: 12),
+              child: LinearProgressIndicator(
+                minHeight: 2,
+                color: AppColors.primary,
+                backgroundColor: AppColors.surface,
+              ),
+            ),
 
-          _buildGraphContainer("Uso de RAM", Colors.purple, ramPoints),
-          _buildDetailLabel("Memoria: $_usedRamMb MB / $_totalRamMb MB"),
-          const SizedBox(height: 25),
+          //  Circulos CPU / Memoria / Disco
+          Row(
+            children: [
+              Expanded(child: _buildCircleCard(
+                label:      'CPU',
+                percent:    cpuVal,
+                centerText: '${cpuVal.toStringAsFixed(1)}%',
+                color:      Colors.blue,
+              )),
+              const SizedBox(width: 10),
+              Expanded(child: _buildCircleCard(
+                label:       'Memoria',
+                percent:     ramPct,
+                centerText:  'Used\n${_mbToReadable(usedRam)}\n${_mbToReadable(totalRam)}\nTotal',
+                color:       Colors.purple,
+                smallCenter: true,
+              )),
+              const SizedBox(width: 10),
+              Expanded(child: _buildCircleCard(
+                label:       'Disco',
+                percent:     diskVal,
+                centerText:  'Used\n$diskStr',
+                color:       Colors.orange,
+                smallCenter: true,
+              )),
+            ],
+          ),
 
-          _buildGraphContainer("Almacenamiento (Raíz /)", Colors.orange, diskPoints),
-          _buildDetailLabel("Ocupado: $_rawDiskInfo del total"),
-          const SizedBox(height: 30),
+          const SizedBox(height: 16),
+
+          // 
+          _buildNetworkCard(),
+
+          const SizedBox(height: 16),
+
+          //  Procesos 
+          _buildProcessesCard(),
         ],
       ),
     );
   }
 
-  Widget _buildDetailLabel(String text) {
+  Widget _buildCircleCard({
+    required String label,
+    required double percent,
+    required String centerText,
+    required Color  color,
+    bool smallCenter = false,
+  }) {
+    final clamped  = percent.clamp(0.0, 100.0);
+    final barColor = clamped > 85 ? AppColors.error
+                   : clamped > 60 ? Colors.orange
+                   : color;
+
     return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.only(top: 8, left: 8),
-      child: Text(
-        text,
-        style: const TextStyle(color: AppColors.textMuted, fontSize: 12, fontWeight: FontWeight.w500),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        children: [
+          Text(label, style: const TextStyle(
+              color: AppColors.textMuted, fontSize: 12, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 10),
+          SizedBox(
+            width: 80, height: 80,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                SizedBox(
+                  width: 80, height: 80,
+                  child: CircularProgressIndicator(
+                    value:           (clamped / 100),
+                    strokeWidth:     7,
+                    backgroundColor: AppColors.border,
+                    color:           barColor,
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.all(8),
+                  child: Text(
+                    centerText,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color:      AppColors.textPrimary,
+                      fontSize:   smallCenter ? 9 : 13,
+                      fontWeight: FontWeight.bold,
+                      height:     1.3,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
+
+  Widget _buildNetworkCard() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Redes', style: TextStyle(
+              color: AppColors.textMuted, fontSize: 13, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 12),
+          const Text('Conexión activa',
+              style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+          const SizedBox(height: 10),
+          _netRow(color: Colors.blue,   label: 'Download', value: _downloadSpeed),
+          const SizedBox(height: 8),
+          _netRow(color: Colors.purple, label: 'Upload',   value: _uploadSpeed),
+          const SizedBox(height: 8),
+          _netRow(color: Colors.orange, label: 'IPv4',     value: _ipv4),
+        ],
+      ),
+    );
+  }
+
+  Widget _netRow({required Color color, required String label, required String value}) {
+    return Row(
+      children: [
+        Container(
+          width: 12, height: 12,
+          decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(3)),
+        ),
+        const SizedBox(width: 10),
+        Text(label, style: const TextStyle(color: AppColors.textMuted, fontSize: 13)),
+        const Spacer(),
+        Text(value, style: const TextStyle(
+            color: AppColors.textPrimary, fontSize: 13, fontWeight: FontWeight.w600)),
+      ],
+    );
+  }
+
+  Widget _buildProcessesCard() {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+            child: Row(
+              children: [
+                const Text('Aplicaciones', style: TextStyle(
+                    color: AppColors.textPrimary, fontSize: 15, fontWeight: FontWeight.bold)),
+                const Spacer(),
+                if (_isMonitorFetching)
+                  const SizedBox(width: 14, height: 14,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary)),
+                const SizedBox(width: 8),
+                Text('${_processes.length} procesos',
+                    style: const TextStyle(color: AppColors.textMuted, fontSize: 11)),
+              ],
+            ),
+          ),
+          const SizedBox(height: 10),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            color: AppColors.background,
+            child: const Row(
+              children: [
+                Expanded(flex: 3, child: _ProcHeader('Name')),
+                Expanded(flex: 2, child: _ProcHeader('CPU',    right: true)),
+                Expanded(flex: 2, child: _ProcHeader('Memory', right: true)),
+                Expanded(flex: 2, child: _ProcHeader('User',   right: true)),
+                Expanded(flex: 1, child: _ProcHeader('PID',    right: true)),
+                SizedBox(width: 36),
+              ],
+            ),
+          ),
+          if (_processes.isEmpty)
+            const Padding(
+              padding: EdgeInsets.all(24),
+              child: Center(child: Text('Sin datos. Desliza para actualizar.',
+                  style: TextStyle(color: AppColors.textMuted))),
+            )
+          else
+            ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: _processes.length,
+              separatorBuilder: (_, __) => const Divider(height: 1, color: AppColors.border),
+              itemBuilder: (_, i) => _buildProcessRow(_processes[i]),
+            ),
+          const SizedBox(height: 8),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProcessRow(ProcessNode proc) {
+    final icon     = _processIcon(proc.name);
+    final cpuColor = proc.cpuPercentage > 50 ? AppColors.error
+                   : proc.cpuPercentage > 20 ? Colors.orange
+                   : AppColors.textPrimary;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      child: Row(
+        children: [
+          Expanded(flex: 3, child: Row(
+            children: [
+              Icon(icon, size: 18, color: AppColors.primary),
+              const SizedBox(width: 8),
+              Expanded(child: Text(proc.name,
+                style: const TextStyle(color: AppColors.textPrimary, fontSize: 12, fontWeight: FontWeight.w500),
+                overflow: TextOverflow.ellipsis,
+              )),
+            ],
+          )),
+          Expanded(flex: 2, child: Text('${proc.cpuPercentage.toStringAsFixed(1)}%',
+            textAlign: TextAlign.right,
+            style: TextStyle(color: cpuColor, fontSize: 12),
+          )),
+          Expanded(flex: 2, child: Text(proc.memoryUsage,
+            textAlign: TextAlign.right,
+            style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
+          )),
+          Expanded(flex: 2, child: Text(proc.user,
+            textAlign: TextAlign.right,
+            style: const TextStyle(color: AppColors.textMuted, fontSize: 11),
+            overflow: TextOverflow.ellipsis,
+          )),
+          Expanded(flex: 1, child: Text(proc.pid,
+            textAlign: TextAlign.right,
+            style: const TextStyle(color: AppColors.textMuted, fontSize: 11),
+          )),
+          SizedBox(width: 36, child: IconButton(
+            icon: const Icon(Icons.close, size: 15, color: AppColors.error),
+            tooltip: 'kill -9',
+            padding: EdgeInsets.zero,
+            onPressed: () => _confirmKillProcess(proc),
+          )),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _confirmKillProcess(ProcessNode proc) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        title: const Text('¿Matar proceso?',
+            style: TextStyle(color: AppColors.textPrimary)),
+        content: Text('PID ${proc.pid} — ${proc.name}\n\nEsta acción no se puede deshacer.',
+            style: const TextStyle(color: AppColors.textMuted)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancelar', style: TextStyle(color: AppColors.textMuted)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Matar', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      final result = await _activeServer!.sshService.killProcess(proc.pid);
+      if (mounted) {
+        _showSnackBar(result.message, isError: !result.success);
+        if (result.success) _refreshMonitorData();
+      }
+    }
+  }
+
+  // TERMINAL TAB
+
+  Widget _buildTerminalTab() {
+    return Container(
+      color: AppColors.terminalBg,
+      padding: const EdgeInsets.all(12.0),
+      child: Container(
+        decoration: BoxDecoration(
+          border: Border.all(color: AppColors.border),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: TerminalView(
+            terminal,
+            autofocus: true,
+            backgroundOpacity: 1,
+            theme: TerminalTheme(
+              cursor:     AppColors.textPrimary,
+              selection:  Colors.blueAccent.withOpacity(0.4),
+              foreground: AppColors.textPrimary,
+              background: AppColors.background,
+              black:      Colors.black,
+              red:        AppColors.error,
+              green:      AppColors.success,
+              yellow:     Colors.yellowAccent,
+              blue:       Colors.blueAccent,
+              magenta:    Colors.purpleAccent,
+              cyan:       Colors.cyanAccent,
+              white:      AppColors.textPrimary,
+              brightBlack:   Colors.grey,
+              brightRed:     Colors.red,
+              brightGreen:   Colors.green,
+              brightYellow:  Colors.yellow,
+              brightBlue:    Colors.blue,
+              brightMagenta: Colors.purple,
+              brightCyan:    Colors.cyan,
+              brightWhite:   Colors.white,
+              searchHitBackground:        Colors.yellowAccent.withOpacity(0.3),
+              searchHitBackgroundCurrent: Colors.orangeAccent.withOpacity(0.5),
+              searchHitForeground:        Colors.black,
+            ),
+            textStyle: const TerminalStyle(fontSize: 12),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ARCHIVOS TAB
 
   Widget _buildArchivosTab() {
     return Column(
@@ -450,15 +750,12 @@ void _handleTerminalInput(String input, SSHSession session) {
                 ),
               const Icon(Icons.folder_open, color: AppColors.textMuted, size: 20),
               const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  currentPath,
-                  style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 13),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
+              Expanded(child: Text(currentPath,
+                style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 13),
+                overflow: TextOverflow.ellipsis)),
               if (_isLoadingFiles)
-                const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary)),
+                const SizedBox(width: 16, height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary)),
             ],
           ),
         ),
@@ -468,13 +765,47 @@ void _handleTerminalInput(String input, SSHSession session) {
             onRefresh: _refreshFiles,
             child: ListView.builder(
               itemCount: currentFiles.length,
-              itemBuilder: (context, index) => _buildFileNodeItem(currentFiles[index]),
+              itemBuilder: (_, i) => _buildFileNodeItem(currentFiles[i]),
             ),
           ),
         ),
       ],
     );
   }
+
+  Widget _buildFileNodeItem(FileNode node) {
+    final isDir = node.isDirectory;
+    IconData icon = Icons.insert_drive_file;
+    Color   color = AppColors.textMuted;
+
+    if (isDir) { icon = Icons.folder; color = AppColors.fileDir; }
+    else if (node.type == FileType.txt || node.type == FileType.markdown)
+      { icon = Icons.description; color = AppColors.fileTxt; }
+    else if (node.type == FileType.image)
+      { icon = Icons.image; color = AppColors.fileImg; }
+    else if (node.type == FileType.config)
+      { icon = Icons.settings; color = AppColors.fileCfg; }
+
+    return ListTile(
+      leading: Icon(icon, color: color),
+      title:    Text(node.name,
+          style: const TextStyle(color: AppColors.textPrimary, fontSize: 14)),
+      subtitle: Text("${node.permissions} • ${_formatSize(node.sizeInBytes)}",
+          style: const TextStyle(color: AppColors.textMuted, fontSize: 11)),
+      trailing: isDir
+          ? const Icon(Icons.chevron_right, color: AppColors.textMuted, size: 20)
+          : null,
+      onTap: () {
+        if (node.isDirectory) {
+          if (node.name == ".") return;
+          setState(() => currentPath = node.path);
+          _refreshFiles();
+        }
+      },
+    );
+  }
+
+  // APPS MANAGER TAB
 
   Widget _buildAppsManagerTab() {
     if (!_appsStatusSyncRequested) {
@@ -498,20 +829,13 @@ void _handleTerminalInput(String input, SSHSession session) {
                     width: double.infinity,
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                     color: AppColors.surface,
-                    child: const Row(
-                      children: [
-                        SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
-                        ),
-                        SizedBox(width: 10),
-                        Text(
-                          'Comprobando apps instaladas...',
-                          style: TextStyle(color: AppColors.textMuted, fontSize: 12),
-                        ),
-                      ],
-                    ),
+                    child: const Row(children: [
+                      SizedBox(width: 16, height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary)),
+                      SizedBox(width: 10),
+                      Text('Comprobando apps instaladas...',
+                          style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
+                    ]),
                   ),
                 Container(
                   padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
@@ -525,51 +849,31 @@ void _handleTerminalInput(String input, SSHSession session) {
                       hintStyle: const TextStyle(color: AppColors.textMuted),
                       prefixIcon: const Icon(Icons.search, color: AppColors.textMuted),
                       suffixIcon: _isAppsSearchInProgress
-                          ? const Padding(
-                              padding: EdgeInsets.all(12),
-                              child: SizedBox(
-                                width: 16,
-                                height: 16,
-                                child: CircularProgressIndicator(strokeWidth: 2),
-                              ),
-                            )
+                          ? const Padding(padding: EdgeInsets.all(12),
+                              child: SizedBox(width: 16, height: 16,
+                                child: CircularProgressIndicator(strokeWidth: 2)))
                           : (_appsSearchController.text.trim().isNotEmpty
-                              ? IconButton(
-                                  onPressed: _clearAppsSearch,
-                                  icon: const Icon(Icons.close, color: AppColors.textMuted),
-                                )
+                              ? IconButton(onPressed: _clearAppsSearch,
+                                  icon: const Icon(Icons.close, color: AppColors.textMuted))
                               : null),
                       filled: true,
                       fillColor: AppColors.background,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        borderSide: const BorderSide(color: AppColors.border),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        borderSide: const BorderSide(color: AppColors.border),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        borderSide: const BorderSide(color: AppColors.primary),
-                      ),
+                      border:        OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AppColors.border)),
+                      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AppColors.border)),
+                      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AppColors.primary)),
                     ),
                   ),
                 ),
                 Expanded(
                   child: searchResults.isEmpty
-                      ? const Center(
-                          child: Text(
-                            'Sin resultados para tu búsqueda.',
-                            style: TextStyle(color: AppColors.textMuted),
-                          ),
-                        )
+                      ? const Center(child: Text('Sin resultados para tu búsqueda.',
+                          style: TextStyle(color: AppColors.textMuted)))
                       : ListView.separated(
                           padding: const EdgeInsets.all(16),
                           itemCount: searchResults.length,
                           separatorBuilder: (_, __) => const SizedBox(height: 10),
-                          itemBuilder: (context, index) {
-                            final app = searchResults[index];
+                          itemBuilder: (_, i) {
+                            final app   = searchResults[i];
                             final state = states[app.id] ?? const AppInstallState.idle();
                             return _buildManagedAppCard(app: app, state: state);
                           },
@@ -585,32 +889,18 @@ void _handleTerminalInput(String input, SSHSession session) {
 
   void _handleAppsSearchChanged(String value) {
     _appsSearchDebounce?.cancel();
-    _appsSearchDebounce = Timer(const Duration(milliseconds: 350), () {
-      _runAppsSearch(value);
-    });
+    _appsSearchDebounce = Timer(const Duration(milliseconds: 350), () => _runAppsSearch(value));
     setState(() {});
   }
 
   Future<void> _runAppsSearch(String query) async {
-    final requestId = ++_searchRequestId;
-    if (mounted) {
-      setState(() {
-        _isAppsSearchInProgress = true;
-      });
-    }
-
+    final id = ++_searchRequestId;
+    if (mounted) setState(() => _isAppsSearchInProgress = true);
     try {
-      await widget.serverController.searchApps(
-        serverId: widget.serverConfig.id,
-        query: query,
-      );
+      await widget.serverController.searchApps(serverId: widget.serverConfig.id, query: query);
     } finally {
-      if (!mounted || requestId != _searchRequestId) {
-        return;
-      }
-      setState(() {
-        _isAppsSearchInProgress = false;
-      });
+      if (!mounted || id != _searchRequestId) return;
+      setState(() => _isAppsSearchInProgress = false);
     }
   }
 
@@ -618,118 +908,75 @@ void _handleTerminalInput(String input, SSHSession session) {
     _appsSearchController.clear();
     _appsSearchDebounce?.cancel();
     _runAppsSearch('');
-    if (mounted) {
-      setState(() {});
-    }
+    if (mounted) setState(() {});
   }
 
   Future<void> _syncAppsStatus() async {
     if (_isAppsStatusSyncInProgress) return;
-
-    if (mounted) {
-      setState(() {
-        _isAppsStatusSyncInProgress = true;
-      });
-    }
-
+    if (mounted) setState(() => _isAppsStatusSyncInProgress = true);
     try {
       await widget.serverController.refreshInstalledApps(serverId: widget.serverConfig.id);
     } catch (_) {
-      // Evitamos ruido visual; la UI ya refleja fallos por app cuando aplique.
     } finally {
-      if (mounted) {
-        setState(() {
-          _isAppsStatusSyncInProgress = false;
-        });
-      }
+      if (mounted) setState(() => _isAppsStatusSyncInProgress = false);
     }
   }
 
-  Widget _buildManagedAppCard({
-    required ManagedApp app,
-    required AppInstallState state,
-  }) {
-    final packageManager = (_activeServer?.packageManager ?? 'unknown').toLowerCase();
-    final canRunAction = !state.isBusy && packageManager != 'unknown';
-    final isInstalled = state.isInstalled;
+  Widget _buildManagedAppCard({required ManagedApp app, required AppInstallState state}) {
+    final pkgMgr      = (_activeServer?.packageManager ?? 'unknown').toLowerCase();
+    final canRunAction = !state.isBusy && pkgMgr != 'unknown';
+    final isInstalled  = state.isInstalled;
 
-    final buttonLabel = state.status == AppInstallStatus.installing
-        ? 'Instalando...'
-        : state.status == AppInstallStatus.uninstalling
-            ? 'Eliminando...'
-            : isInstalled
-                ? 'Eliminar'
-                : 'Instalar';
-
-    final buttonColor = isInstalled ? AppColors.error : AppColors.primary;
+    final btnLabel = state.status == AppInstallStatus.installing   ? 'Instalando...'
+                   : state.status == AppInstallStatus.uninstalling ? 'Eliminando...'
+                   : isInstalled ? 'Eliminar' : 'Instalar';
+    final btnColor = isInstalled ? AppColors.error : AppColors.primary;
 
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: AppTheme.glassCard.copyWith(color: AppColors.surface),
       child: Row(
         children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  app.displayName,
-                  style: const TextStyle(
-                    color: AppColors.textPrimary,
-                    fontSize: 15,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  app.description,
-                  style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
-                ),
+          Expanded(child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(app.displayName, style: const TextStyle(
+                  color: AppColors.textPrimary, fontSize: 15, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 4),
+              Text(app.description,
+                  style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
+              const SizedBox(height: 8),
+              _buildInstallStateBadge(state),
+              if (state.message != null && state.message!.trim().isNotEmpty) ...[
                 const SizedBox(height: 8),
-                _buildInstallStateBadge(state),
-                if (state.message != null && state.message!.trim().isNotEmpty) ...[
-                  const SizedBox(height: 8),
-                  Text(
-                    state.message!,
-                    style: const TextStyle(color: AppColors.textMuted, fontSize: 11),
-                  ),
-                ],
-                if (packageManager == 'unknown') ...[
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Package manager no detectado para esta sesión.',
-                    style: TextStyle(color: AppColors.error, fontSize: 11),
-                  ),
-                ],
+                Text(state.message!,
+                    style: const TextStyle(color: AppColors.textMuted, fontSize: 11)),
               ],
-            ),
-          ),
+              if (pkgMgr == 'unknown') ...[
+                const SizedBox(height: 8),
+                const Text('Package manager no detectado.',
+                    style: TextStyle(color: AppColors.error, fontSize: 11)),
+              ],
+            ],
+          )),
           const SizedBox(width: 10),
           ElevatedButton(
-            onPressed: canRunAction
-                ? () {
-                    if (isInstalled) {
-                      widget.serverController.uninstallAppInBackground(
-                        serverId: widget.serverConfig.id,
-                        appId: app.id,
-                        packageName: app.packageName,
-                      );
-                    } else {
-                      widget.serverController.installAppInBackground(
-                        serverId: widget.serverConfig.id,
-                        appId: app.id,
-                        packageName: app.packageName,
-                      );
-                    }
-                  }
-                : null,
+            onPressed: canRunAction ? () {
+              if (isInstalled) {
+                widget.serverController.uninstallAppInBackground(
+                  serverId: widget.serverConfig.id, appId: app.id, packageName: app.packageName);
+              } else {
+                widget.serverController.installAppInBackground(
+                  serverId: widget.serverConfig.id, appId: app.id, packageName: app.packageName);
+              }
+            } : null,
             style: ElevatedButton.styleFrom(
-              backgroundColor: buttonColor,
+              backgroundColor:         btnColor,
               disabledBackgroundColor: AppColors.border,
-              foregroundColor: AppColors.textPrimary,
+              foregroundColor:         AppColors.textPrimary,
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             ),
-            child: Text(buttonLabel),
+            child: Text(btnLabel),
           ),
         ],
       ),
@@ -737,36 +984,15 @@ void _handleTerminalInput(String input, SSHSession session) {
   }
 
   Widget _buildInstallStateBadge(AppInstallState state) {
-    String label;
-    Color color;
-
+    String label; Color color;
     switch (state.status) {
-      case AppInstallStatus.installing:
-        label = 'Instalando';
-        color = Colors.amber;
-        break;
-      case AppInstallStatus.uninstalling:
-        label = 'Eliminando';
-        color = Colors.orange;
-        break;
-      case AppInstallStatus.installed:
-        label = 'Instalada';
-        color = AppColors.success;
-        break;
-      case AppInstallStatus.failure:
-        label = 'Fallo';
-        color = AppColors.error;
-        break;
-      case AppInstallStatus.success:
-        label = 'Exito';
-        color = AppColors.success;
-        break;
-      case AppInstallStatus.idle:
-        label = 'Listo';
-        color = AppColors.textMuted;
-        break;
+      case AppInstallStatus.installing:   label = 'Instalando'; color = Colors.amber;        break;
+      case AppInstallStatus.uninstalling: label = 'Eliminando'; color = Colors.orange;       break;
+      case AppInstallStatus.installed:    label = 'Instalada';  color = AppColors.success;   break;
+      case AppInstallStatus.failure:      label = 'Fallo';      color = AppColors.error;     break;
+      case AppInstallStatus.success:      label = 'Exito';      color = AppColors.success;   break;
+      case AppInstallStatus.idle:         label = 'Listo';      color = AppColors.textMuted; break;
     }
-
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
@@ -774,163 +1000,63 @@ void _handleTerminalInput(String input, SSHSession session) {
         borderRadius: BorderRadius.circular(999),
         border: Border.all(color: color.withOpacity(0.35)),
       ),
-      child: Text(
-        label,
-        style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w700),
-      ),
+      child: Text(label,
+          style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w700)),
     );
   }
 
-  Widget _buildFileNodeItem(FileNode node) {
-    final isDir = node.isDirectory;
-    IconData nodeIcon = Icons.insert_drive_file;
-    Color iconColor = AppColors.textMuted;
+  // HELPERS
 
-    if (isDir) {
-      nodeIcon = Icons.folder;
-      iconColor = AppColors.fileDir;
-    } else if (node.type == FileType.txt || node.type == FileType.markdown) {
-      nodeIcon = Icons.description;
-      iconColor = AppColors.fileTxt;
-    } else if (node.type == FileType.image) {
-      nodeIcon = Icons.image;
-      iconColor = AppColors.fileImg;
-    } else if (node.type == FileType.config) {
-      nodeIcon = Icons.settings;
-      iconColor = AppColors.fileCfg;
-    }
-
-    return ListTile(
-      leading: Icon(nodeIcon, color: iconColor),
-      title: Text(node.name, style: const TextStyle(color: AppColors.textPrimary, fontSize: 14)),
-      subtitle: Text("${node.permissions} • ${_formatSize(node.sizeInBytes)}",
-          style: const TextStyle(color: AppColors.textMuted, fontSize: 11)),
-      trailing: isDir ? const Icon(Icons.chevron_right, color: AppColors.textMuted, size: 20) : null,
-      onTap: () {
-        if (node.isDirectory) {
-          if (node.name == ".") return;
-          setState(() {
-            currentPath = node.path;
-          });
-          _refreshFiles();
-        } else {
-          debugPrint("Tocaste el archivo: ${node.name}");
-        }
-      },
-    );
+  IconData _processIcon(String name) {
+    final n = name.toLowerCase();
+    if (n.contains('nginx') || n.contains('apache') || n.contains('httpd')) return Icons.dns;
+    if (n.contains('mysql') || n.contains('postgres') || n.contains('mongo')) return Icons.storage;
+    if (n.contains('bash')  || n.contains('zsh')  || n.startsWith('sh'))     return Icons.terminal;
+    if (n.contains('python')|| n.contains('node') || n.contains('java'))     return Icons.code;
+    if (n.contains('systemd')|| n.contains('init'))                          return Icons.settings;
+    if (n.contains('ssh'))                                                    return Icons.lock;
+    return Icons.memory;
   }
 
-  Widget _buildTerminalTab() {
-    return Container(
-      color: AppColors.terminalBg,
-      padding: const EdgeInsets.all(12.0),
-      child: Container(
-        decoration: BoxDecoration(
-          border: Border.all(color: AppColors.border),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(8),
-          child: TerminalView(
-            terminal,
-            autofocus: true,
-            backgroundOpacity: 1,
-            theme: TerminalTheme(
-              cursor: AppColors.textPrimary,
-              selection: Colors.blueAccent.withOpacity(0.4),
-              foreground: AppColors.textPrimary,
-              background: AppColors.background, // Usa el fondo base oscuro
-              black: Colors.black,
-              red: AppColors.error,
-              green: AppColors.success,
-              yellow: Colors.yellowAccent,
-              blue: Colors.blueAccent,
-              magenta: Colors.purpleAccent,
-              cyan: Colors.cyanAccent,
-              white: AppColors.textPrimary,
-              brightBlack: Colors.grey,
-              brightRed: Colors.red,
-              brightGreen: Colors.green,
-              brightYellow: Colors.yellow,
-              brightBlue: Colors.blue,
-              brightMagenta: Colors.purple,
-              brightCyan: Colors.cyan,
-              brightWhite: Colors.white,
-              searchHitBackground: Colors.yellowAccent.withOpacity(0.3),
-              searchHitBackgroundCurrent: Colors.orangeAccent.withOpacity(0.5),
-              searchHitForeground: Colors.black,
-            ),
-            textStyle: const TerminalStyle(fontSize: 12),
-          ),
-        ),
-      ),
-    );
+  String _mbToReadable(int mb) {
+    if (mb >= 1024) return '${(mb / 1024).toStringAsFixed(1)} GB';
+    return '$mb MB';
   }
 
-  Widget _buildGraphContainer(String title, Color col, List<FlSpot> points) {
-    return Container(
-      height: 220,
-      padding: const EdgeInsets.all(16),
-      decoration: AppTheme.glassCard.copyWith(
-          color: AppColors.surface // Un poco más oscuro que el highlight
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(title, style: const TextStyle(color: AppColors.textSecondary, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 20),
-          Expanded(
-            child: LineChart(
-              LineChartData(
-                minY: 0,
-                maxY: 100,
-                lineBarsData: [
-                  LineChartBarData(
-                    spots: points,
-                    color: col,
-                    isCurved: true,
-                    barWidth: 3,
-                    dotData: const FlDotData(show: false),
-                    belowBarData: BarAreaData(show: true, color: col.withOpacity(0.1)),
-                  )
-                ],
-                titlesData: const FlTitlesData(show: false),
-                gridData: const FlGridData(show: true, drawVerticalLine: false),
-                borderData: FlBorderData(show: false),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  String _getDistroIcon(String distroName) {
-    final normalized = distroName.toLowerCase();
-    if (normalized.contains('ubuntu')) return '🐧';
-    if (normalized.contains('debian')) return '🦆';
-    if (normalized.contains('arch')) return '🌀';
-    if (normalized.contains('manjaro')) return '🌲';
-    if (normalized.contains('fedora')) return '🛡️';
-    if (normalized.contains('rhel') || normalized.contains('red hat')) return '🔥';
+  String _getDistroIcon(String d) {
+    final n = d.toLowerCase();
+    if (n.contains('ubuntu'))  return '🐧';
+    if (n.contains('debian'))  return '🦆';
+    if (n.contains('arch'))    return '🌀';
+    if (n.contains('manjaro')) return '🌲';
+    if (n.contains('fedora'))  return '🛡️';
+    if (n.contains('rhel') || n.contains('red hat')) return '🔥';
     return '🐧';
   }
 
   String _formatSize(int bytes) {
     if (bytes <= 0) return "0 B";
-    const suffixes = ["B", "KB", "MB", "GB"];
+    const s = ["B", "KB", "MB", "GB"];
     var i = (log(bytes) / log(1024)).floor();
-    return '${(bytes / pow(1024, i)).toStringAsFixed(1)} ${suffixes[i]}';
+    return '${(bytes / pow(1024, i)).toStringAsFixed(1)} ${s[i]}';
   }
+}
 
-  void _goBack() {
-    if (currentPath == "/" || currentPath == "") return;
-    List<String> parts = currentPath.split('/');
-    if (parts.last.isEmpty) parts.removeLast();
-    if (parts.isNotEmpty) parts.removeLast();
-    String newPath = parts.join('/');
-    if (newPath.isEmpty) newPath = "/";
-    setState(() => currentPath = newPath);
-    _refreshFiles();
+// WIDGET HELPER
+
+class _ProcHeader extends StatelessWidget {
+  final String text;
+  final bool right;
+  const _ProcHeader(this.text, {this.right = false});
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(text,
+      textAlign: right ? TextAlign.right : TextAlign.left,
+      style: const TextStyle(
+        color: AppColors.textMuted, fontSize: 11,
+        fontWeight: FontWeight.w700, letterSpacing: 0.4,
+      ),
+    );
   }
 }
