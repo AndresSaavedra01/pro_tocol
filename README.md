@@ -85,8 +85,8 @@ El objetivo de este primer bloque es transformar el prototipo base de Pro-Tocol 
 
 | Épica | Enfoque |
 |---|---|
-| **Refactorización del Código** | Modularización, SOLID/DRY, Validaciones, Manejo de errores, Gestión de perfiles, Pulido de UX. |
-| **Expansión de Nuevas Funcionalidades** | Dashboard de Monitoreo, Explorador SFTP, Historial de Comandos, Detección de Distro, Instalador Gráfico, Sistema de Templates. |
+| **Refactorización del Código** | • Modularización<br>• SOLID/DRY<br>• Validaciones<br>• Manejo de errores<br>• Gestión de perfiles<br>• Pulido de UX. |
+| **Expansión de Nuevas Funcionalidades** | • Dashboard de Monitoreo<br>• Explorador SFTP<br>• Historial de Comandos<br>• Detección de Distro<br>• Instalador Gráfico<br>• Sistema de Templates. |
 
 
 ### Fuera de Alcance (Sprint 1)
