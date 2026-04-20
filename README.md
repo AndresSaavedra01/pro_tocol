@@ -118,4 +118,9 @@ El objetivo de este primer bloque es transformar el prototipo base de Pro-Tocol 
 4. **Monitoreo:** La pestaña de monitoreo debe mostrar datos reales de CPU, RAM y Disco del servidor.
 5. **Navegación:** El explorador debe listar archivos de cualquier ruta solicitada (ej. `/etc` o `/var`).
 
+### Notas de Implementación
+
+- Las Sesiones Temporales no se persisten en la base de datos local; se eliminan al cerrar la aplicación o la sesión.
+- El Explorador de Archivos en el Sprint 1 se limita a la visualización de la estructura de directorios para asegurar estabilidad.
+- La arquitectura debe garantizar que las pestañas del servidor mantengan su estado independiente durante la conexión activa.
 
