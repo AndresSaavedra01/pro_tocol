@@ -110,4 +110,12 @@ El objetivo de este primer bloque es transformar el prototipo base de Pro-Tocol 
 | ES-20 | Dev C | Sistema de Templates | Checklist de validación antes de aplicar plantilla. Automatización de configuración básica. Reporte de cambios aplicados. | 5 |
 | **TOTAL** | | | Carga balanceada: Dev A (18), Dev B (12), Dev C (16) | **49** |
 
+### Criterios de Aceptación Generales (DoD)
+
+1. **Conexión Exitosa:** Se debe lograr el acceso a un servidor Linux real desde la app.
+2. **Persistencia:** Al reiniciar la app, los perfiles y servidores creados deben seguir ahí.
+3. **Multitarea:** Se debe poder abrir una terminal en una sesión temporal y otra en un servidor guardado simultáneamente.
+4. **Monitoreo:** La pestaña de monitoreo debe mostrar datos reales de CPU, RAM y Disco del servidor.
+5. **Navegación:** El explorador debe listar archivos de cualquier ruta solicitada (ej. `/etc` o `/var`).
+
 
