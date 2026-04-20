@@ -27,7 +27,7 @@ El sistema permite la conexión a servidores mediante el protocolo SSH, organiza
 
 ---
 
-## Planificación: Sprint 1
+## Planificación: Sprint 0
 
 El objetivo de este primer bloque es establecer la base de conectividad, la persistencia de perfiles y la navegación visual básica.
 
@@ -43,7 +43,7 @@ El objetivo de este primer bloque es establecer la base de conectividad, la pers
 
 ---
 
-## Backlog del Sprint 1: Conectividad y Estructura Base
+## Backlog del Sprint 0: Conectividad y Estructura Base
 
 | ID | Rol | Historia de Usuario | Descripción / Criterios de Aceptación | SP |
 | :--- | :--- | :--- | :--- | :--- |
@@ -72,3 +72,18 @@ El objetivo de este primer bloque es establecer la base de conectividad, la pers
 * Las **Sesiones Temporales** no se persisten en la base de datos local; se eliminan al cerrar la aplicación o la sesión.
 * El **Explorador de Archivos** en el Sprint 1 se limita a la visualización de la estructura de directorios para asegurar estabilidad.
 * La arquitectura debe garantizar que las tres pestañas del servidor mantengan su estado independiente durante la conexión activa.
+
+---
+
+
+## Planificación: Sprint 1
+El objetivo de este primer bloque es transformar el prototipo base de Pro-Tocol en una aplicación estable mediante la aplicación de estándares SOLID, garantizando un manejo de errores resiliente e implementando las capacidades núcleo de gestión visual (SFTP y Monitoreo de Hardware).
+
+### Alcance
+
+| Épica | Enfoque |
+|---|---|
+| **Refactorización del Código** | Modularización, SOLID/DRY, Validaciones, Manejo de errores, Gestión de perfiles, Pulido de UX. |
+| **Expansión de Nuevas Funcionalidades** | Dashboard de Monitoreo, Explorador SFTP, Historial de Comandos, Detección de Distro, Instalador Gráfico, Sistema de Templates. |
+
+
