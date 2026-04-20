@@ -76,8 +76,10 @@ El objetivo de este primer bloque es establecer la base de conectividad, la pers
 ---
 
 
+
 ## Planificación: Sprint 1
 El objetivo de este primer bloque es transformar el prototipo base de Pro-Tocol en una aplicación estable mediante la aplicación de estándares SOLID, garantizando un manejo de errores resiliente e implementando las capacidades núcleo de gestión visual (SFTP y Monitoreo de Hardware).
+
 
 ### Alcance
 
@@ -86,11 +88,13 @@ El objetivo de este primer bloque es transformar el prototipo base de Pro-Tocol 
 | **Refactorización del Código** | Modularización, SOLID/DRY, Validaciones, Manejo de errores, Gestión de perfiles, Pulido de UX. |
 | **Expansión de Nuevas Funcionalidades** | Dashboard de Monitoreo, Explorador SFTP, Historial de Comandos, Detección de Distro, Instalador Gráfico, Sistema de Templates. |
 
+
 ### Fuera de Alcance (Sprint 1)
 
 - Entrenamiento de la IA
 - Conexión de IA
-- Asistente de IA integrado (Ollama) — planificado para Sprint 2
+- Asistente de IA integrado (Ollama)
+- Despliegue
 
 ### Backlog del Sprint 1
 
