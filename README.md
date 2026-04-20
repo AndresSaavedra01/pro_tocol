@@ -86,4 +86,28 @@ El objetivo de este primer bloque es transformar el prototipo base de Pro-Tocol 
 | **Refactorización del Código** | Modularización, SOLID/DRY, Validaciones, Manejo de errores, Gestión de perfiles, Pulido de UX. |
 | **Expansión de Nuevas Funcionalidades** | Dashboard de Monitoreo, Explorador SFTP, Historial de Comandos, Detección de Distro, Instalador Gráfico, Sistema de Templates. |
 
+### Fuera de Alcance (Sprint 1)
+
+- Entrenamiento de la IA
+- Conexión de IA
+- Asistente de IA integrado (Ollama) — planificado para Sprint 2
+
+### Backlog del Sprint 1
+
+| ID | Rol | Historia de Usuario | Descripción / Criterios de Aceptación | SP |
+|---|---|---|---|---|
+| ES-34 | Dev A | Modularización | Reorganizar el proyecto en módulos claros (core, features, shared). Sin dependencias circulares. Modelos independientes de la UI. | 5 |
+| ES-35 | Dev A | Optimización DRY y SOLID | Eliminar código duplicado. Centralizar lógica SSH en un único Service. Clases con una sola responsabilidad (SRP). | 5 |
+| ES-36 | Dev A | Gestión Avanzada de Perfiles | Editar/eliminar perfiles con datos precargados. Diálogo de confirmación. Actualización inmediata en DB local. | 3 |
+| ES-37 | Dev B | Validación de Formularios | Validar formato IP/Dominio. Bloquear envío si faltan campos. Mensajes de error en rojo bajo el campo. | 2 |
+| ES-38 | Dev B | Gestión de Errores de Red | Capturar excepciones dartssh2 (Timeout, Auth Failed). Vista de error con botón "Reintentar". Log técnico para depuración. | 3 |
+| ES-39 | Dev B | Pulido de Interfaz (UX) | Animaciones de transición (Fade/Slide). Eliminar iconos sin funcionalidad. Corregir bug visual del cursor en terminal. | 2 |
+| ES-16 | Dev B | Dashboard de Monitoreo | CPU, RAM y Disco en tiempo real. Listado de procesos con opción kill. Estado de servicios Systemd. | 5 |
+| ES-18 | Dev C | Detección de Distro | Ejecutar `cat /etc/os-release` al conectar. Identificar apt/pacman/dnf. Mostrar logo de distro en el header. | 3 |
+| ES-40 | Dev C | Historial de Comandos | Guardar últimos 50 comandos en sesión. Navegar con flechas. Opción de limpiar historial. | 3 |
+| ES-41 | Dev C | Instalador Gráfico | Botones de instalar para apps comunes. Ejecución en segundo plano. Notificación de éxito o fallo. | 5 |
+| ES-12 | Dev A | Explorador SFTP Funcional | Subida de archivos por selector o drag & drop. Mover archivos entre directorios. Visualización de progreso. | 8 |
+| ES-20 | Dev C | Sistema de Templates | Checklist de validación antes de aplicar plantilla. Automatización de configuración básica. Reporte de cambios aplicados. | 5 |
+| **TOTAL** | | | Carga balanceada: Dev A (18), Dev B (12), Dev C (16) | **49** |
+
 
