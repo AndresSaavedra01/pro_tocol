@@ -156,40 +156,66 @@ class _ServerPageState extends State<ServerPage> {
         backgroundColor: AppColors.background,
         appBar: AppBar(
           backgroundColor: AppColors.surface,
+          // 1. Aumentamos la altura para que quepa la columna
+          toolbarHeight: widget.isTemporarySession ? kToolbarHeight : 90,
+          centerTitle: true,
           title: Column(
+            mainAxisSize: MainAxisSize.min, // Importante para que no ocupe espacio extra
             children: [
               Text(
                 widget.isTemporarySession ? 'Sesión Temporal' : widget.serverConfig.host,
-                style: const TextStyle(color: AppColors.textPrimary, fontSize: 18, fontWeight: FontWeight.bold),
+                style: const TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 16, // Reducido un poco para ganar espacio
+                    fontWeight: FontWeight.bold
+                ),
+                overflow: TextOverflow.ellipsis,
               ),
-              Text(connStr, style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
+              Text(
+                  connStr,
+                  style: const TextStyle(color: AppColors.textMuted, fontSize: 11)
+              ),
               if (!widget.isTemporarySession) ...[
-                const SizedBox(height: 8),
+                const SizedBox(height: 6),
+                // 2. Usamos una Row más compacta
                 Row(
+                  mainAxisSize: MainAxisSize.min,
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Text(distroIcon, style: const TextStyle(fontSize: 18)),
+                    Text(distroIcon, style: const TextStyle(fontSize: 16)),
                     const SizedBox(width: 8),
-                    Column(children: [
-                      Text(distroName, style: const TextStyle(color: AppColors.textPrimary, fontSize: 14)),
-                      Text('Package Manager: $pkgManager', style: const TextStyle(color: AppColors.textMuted, fontSize: 10)),
-                    ]),
+                    Flexible( // Para evitar errores de overflow lateral
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                              distroName,
+                              style: const TextStyle(color: AppColors.textPrimary, fontSize: 12)
+                          ),
+                          Text(
+                              'Pkg: $pkgManager',
+                              style: const TextStyle(color: AppColors.textMuted, fontSize: 9)
+                          ),
+                        ],
+                      ),
+                    ),
                   ],
                 ),
               ],
             ],
           ),
-          centerTitle: true,
           bottom: widget.isTemporarySession
               ? null
               : const TabBar(
             indicatorColor: AppColors.primary,
             labelColor: AppColors.textPrimary,
+            unselectedLabelColor: AppColors.textMuted,
+            labelStyle: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
             tabs: [
-              Tab(text: 'Monitoreo'),
+              Tab(text: 'Monitor'), // Nombres más cortos ayudan en pantallas pequeñas
               Tab(text: 'Terminal'),
               Tab(text: 'Archivos'),
-              Tab(text: 'Apps Manager'),
+              Tab(text: 'Apps'),
             ],
           ),
         ),
