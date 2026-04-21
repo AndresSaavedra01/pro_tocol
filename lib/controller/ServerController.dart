@@ -720,8 +720,32 @@ class ServerController {
   }) async {
     final server = getActiveServer(serverId);
     final startedAt = DateTime.now();
+    final validationResults = <TemplateValidationResult>[];
     final results = <TemplateStepResult>[];
     String? failedStepId;
+    String? failedValidationId;
+
+    final validations = await _runTemplateValidations(server, template.validationRequirements);
+    validationResults.addAll(validations);
+
+    final blockingFailure = _firstBlockingValidationFailure(validationResults, template.validationRequirements);
+
+    if (blockingFailure != null) {
+      failedValidationId = blockingFailure.$1;
+      _appendSkippedStepsAfterValidationFailure(results, template.steps, blockingFailure.$1);
+
+      return TemplateRunResult(
+        templateId: template.id,
+        templateName: template.name,
+        success: false,
+        startedAt: startedAt,
+        finishedAt: DateTime.now(),
+        validationResults: validationResults,
+        failedValidationId: failedValidationId,
+        failedStepId: failedStepId,
+        stepResults: results,
+      );
+    }
 
     for (final step in template.steps) {
       final stepResult = await _executeTemplateStep(server, step);
@@ -743,8 +767,165 @@ class ServerController {
       success: success,
       startedAt: startedAt,
       finishedAt: finishedAt,
+      validationResults: validationResults,
       failedStepId: failedStepId,
+      failedValidationId: failedValidationId,
       stepResults: results,
+    );
+  }
+
+  Future<List<TemplateValidationResult>> _runTemplateValidations(
+    Server server,
+    List<TemplateValidationRequirement> validations,
+  ) async {
+    final results = <TemplateValidationResult>[];
+    String? failedBlockingValidationId;
+
+    for (final validation in validations) {
+      final result = await _executeTemplateValidation(server, validation);
+      results.add(result);
+
+      if (result.status == TemplateValidationStatus.failure && validation.isBlocking) {
+        failedBlockingValidationId = validation.id;
+        break;
+      }
+    }
+
+    if (failedBlockingValidationId != null) {
+      final failedIndex = validations.indexWhere((validation) => validation.id == failedBlockingValidationId);
+      if (failedIndex != -1) {
+        final skippedAt = DateTime.now();
+        for (final validation in validations.skip(failedIndex + 1)) {
+          results.add(
+            TemplateValidationResult(
+              validationId: validation.id,
+              label: validation.label,
+              kind: validation.kind,
+              status: TemplateValidationStatus.skipped,
+              startedAt: skippedAt,
+              finishedAt: skippedAt,
+              error: 'Omitido por fallo crítico en una validación anterior.',
+            ),
+          );
+        }
+      }
+    }
+
+    return results;
+  }
+
+  (String, TemplateValidationRequirement)? _firstBlockingValidationFailure(
+    List<TemplateValidationResult> results,
+    List<TemplateValidationRequirement> validations,
+  ) {
+    for (final result in results) {
+      if (result.status != TemplateValidationStatus.failure) {
+        continue;
+      }
+
+      final validation = validations.firstWhere(
+        (item) => item.id == result.validationId,
+        orElse: () => TemplateValidationRequirement(
+          id: result.validationId,
+          label: result.label,
+          description: result.error ?? '',
+          kind: result.kind,
+          isBlocking: false,
+        ),
+      );
+
+      if (validation.isBlocking) {
+        return (result.validationId, validation);
+      }
+    }
+
+    return null;
+  }
+
+  Future<TemplateValidationResult> _executeTemplateValidation(
+    Server server,
+    TemplateValidationRequirement validation,
+  ) async {
+    final startedAt = DateTime.now();
+
+    String command;
+    switch (validation.kind) {
+      case TemplateValidationKind.diskSpace:
+        command = 'df -Pm / | awk "NR==2 {print \$4}"';
+        break;
+      case TemplateValidationKind.portFree:
+        final port = validation.port;
+        if (port == null) {
+          return TemplateValidationResult(
+            validationId: validation.id,
+            label: validation.label,
+            kind: validation.kind,
+            status: validation.isBlocking ? TemplateValidationStatus.failure : TemplateValidationStatus.skipped,
+            startedAt: startedAt,
+            finishedAt: DateTime.now(),
+            error: 'La validación de puerto no define un número de puerto.',
+          );
+        }
+        command = "sh -lc '! ss -ltn \"( sport = :$port )\" | tail -n +2 | grep -q .'";
+        break;
+      case TemplateValidationKind.packageManagerReady:
+        final packageManager = validation.packageManager ?? server.packageManager ?? 'unknown';
+        command = 'command -v $packageManager >/dev/null 2>&1';
+        break;
+    }
+
+    final result = await _executeCommandWithStatus(server, command, addToHistory: false);
+    final finishedAt = DateTime.now();
+
+    if (validation.kind == TemplateValidationKind.diskSpace) {
+      final availableMb = int.tryParse(result.output.trim()) ?? 0;
+      final minimumMb = validation.minimumFreeDiskSpaceMb ?? 0;
+
+      if (result.exitCode != 0 || availableMb < minimumMb) {
+        return TemplateValidationResult(
+          validationId: validation.id,
+          label: validation.label,
+          kind: validation.kind,
+          status: validation.isBlocking ? TemplateValidationStatus.failure : TemplateValidationStatus.skipped,
+          startedAt: startedAt,
+          finishedAt: finishedAt,
+          output: result.output,
+          error: 'Espacio insuficiente: $availableMb MB libres, mínimo requerido $minimumMb MB.',
+        );
+      }
+
+      return TemplateValidationResult(
+        validationId: validation.id,
+        label: validation.label,
+        kind: validation.kind,
+        status: TemplateValidationStatus.success,
+        startedAt: startedAt,
+        finishedAt: finishedAt,
+        output: result.output,
+      );
+    }
+
+    if (result.exitCode != 0) {
+      return TemplateValidationResult(
+        validationId: validation.id,
+        label: validation.label,
+        kind: validation.kind,
+        status: validation.isBlocking ? TemplateValidationStatus.failure : TemplateValidationStatus.skipped,
+        startedAt: startedAt,
+        finishedAt: finishedAt,
+        output: result.output,
+        error: _validationFailureMessage(validation),
+      );
+    }
+
+    return TemplateValidationResult(
+      validationId: validation.id,
+      label: validation.label,
+      kind: validation.kind,
+      status: TemplateValidationStatus.success,
+      startedAt: startedAt,
+      finishedAt: finishedAt,
+      output: result.output,
     );
   }
 
@@ -812,6 +993,44 @@ class ServerController {
           error: 'Omitido por fallo crítico en un paso anterior.',
         ),
       );
+    }
+  }
+
+  void _appendSkippedStepsAfterValidationFailure(
+    List<TemplateStepResult> results,
+    List<TemplateStep> steps,
+    String failedValidationId,
+  ) {
+    final skippedAt = DateTime.now();
+    for (final step in steps) {
+      results.add(
+        TemplateStepResult(
+          stepId: step.id,
+          title: step.title,
+          kind: step.kind,
+          status: TemplateStepStatus.skipped,
+          startedAt: skippedAt,
+          finishedAt: skippedAt,
+          error: 'Omitido por fallo crítico en una validación previa ($failedValidationId).',
+        ),
+      );
+    }
+  }
+
+  String _validationFailureMessage(TemplateValidationRequirement validation) {
+    switch (validation.kind) {
+      case TemplateValidationKind.diskSpace:
+        return validation.description.isNotEmpty
+            ? validation.description
+            : 'Validación de espacio en disco fallida.';
+      case TemplateValidationKind.portFree:
+        final port = validation.port;
+        return port == null
+            ? 'Validación de puerto fallida.'
+            : 'El puerto $port no está libre.';
+      case TemplateValidationKind.packageManagerReady:
+        final packageManager = validation.packageManager ?? 'package manager';
+        return 'El package manager $packageManager no está listo.';
     }
   }
 
