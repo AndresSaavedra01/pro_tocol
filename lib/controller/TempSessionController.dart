@@ -456,6 +456,11 @@ class TempSessionController {
   Future<TemplateRunResult> runTemplate({
     required String host,
     required TemplateModel template,
+    void Function(
+      TemplateRunResult progress,
+      TemplateValidationRequirement? activeValidation,
+      TemplateStep? activeStep,
+    )? onProgress,
   }) async {
     final session = _getValidSession(host);
     final startedAt = DateTime.now();
@@ -464,14 +469,51 @@ class TempSessionController {
     String? failedStepId;
     String? failedValidationId;
 
+    _emitTemplateProgress(
+      onProgress,
+      template,
+      startedAt,
+      validationResults,
+      results,
+      activeValidation: null,
+      activeStep: null,
+      failedStepId: failedStepId,
+      failedValidationId: failedValidationId,
+      success: false,
+    );
+
     final validations = await _runTemplateValidations(session, template.validationRequirements);
     validationResults.addAll(validations);
+    _emitTemplateProgress(
+      onProgress,
+      template,
+      startedAt,
+      validationResults,
+      results,
+      activeValidation: null,
+      activeStep: null,
+      failedStepId: failedStepId,
+      failedValidationId: failedValidationId,
+      success: false,
+    );
 
     final blockingFailure = _firstBlockingValidationFailure(validationResults, template.validationRequirements);
 
     if (blockingFailure != null) {
       failedValidationId = blockingFailure.$1;
       _appendSkippedStepsAfterValidationFailure(results, template.steps, blockingFailure.$1);
+      _emitTemplateProgress(
+        onProgress,
+        template,
+        startedAt,
+        validationResults,
+        results,
+        activeValidation: null,
+        activeStep: null,
+        failedStepId: failedStepId,
+        failedValidationId: failedValidationId,
+        success: false,
+      );
 
       return TemplateRunResult(
         templateId: template.id,
@@ -487,12 +529,49 @@ class TempSessionController {
     }
 
     for (final step in template.steps) {
+      _emitTemplateProgress(
+        onProgress,
+        template,
+        startedAt,
+        validationResults,
+        results,
+        activeValidation: null,
+        activeStep: step,
+        failedStepId: failedStepId,
+        failedValidationId: failedValidationId,
+        success: false,
+      );
+
       final stepResult = await _executeTemplateStep(session, step);
       results.add(stepResult);
+      _emitTemplateProgress(
+        onProgress,
+        template,
+        startedAt,
+        validationResults,
+        results,
+        activeValidation: null,
+        activeStep: null,
+        failedStepId: failedStepId,
+        failedValidationId: failedValidationId,
+        success: false,
+      );
 
       if (stepResult.status == TemplateStepStatus.failure && step.isCritical) {
         failedStepId = step.id;
         _appendSkippedStepsAfterFailure(results, template.steps, step.id);
+        _emitTemplateProgress(
+          onProgress,
+          template,
+          startedAt,
+          validationResults,
+          results,
+          activeValidation: null,
+          activeStep: null,
+          failedStepId: failedStepId,
+          failedValidationId: failedValidationId,
+          success: false,
+        );
         break;
       }
     }
@@ -510,6 +589,42 @@ class TempSessionController {
       failedStepId: failedStepId,
       failedValidationId: failedValidationId,
       stepResults: results,
+    );
+  }
+
+  void _emitTemplateProgress(
+    void Function(
+      TemplateRunResult progress,
+      TemplateValidationRequirement? activeValidation,
+      TemplateStep? activeStep,
+    )? onProgress,
+    TemplateModel template,
+    DateTime startedAt,
+    List<TemplateValidationResult> validationResults,
+    List<TemplateStepResult> stepResults,
+    {
+    required TemplateValidationRequirement? activeValidation,
+    required TemplateStep? activeStep,
+    required String? failedStepId,
+    required String? failedValidationId,
+    required bool success,
+  }) {
+    if (onProgress == null) return;
+
+    onProgress(
+      TemplateRunResult(
+        templateId: template.id,
+        templateName: template.name,
+        success: success,
+        startedAt: startedAt,
+        finishedAt: DateTime.now(),
+        validationResults: List<TemplateValidationResult>.from(validationResults),
+        failedStepId: failedStepId,
+        failedValidationId: failedValidationId,
+        stepResults: List<TemplateStepResult>.from(stepResults),
+      ),
+      activeValidation,
+      activeStep,
     );
   }
 
@@ -660,7 +775,12 @@ class TempSessionController {
       );
     }
 
-    final result = await _executeCommandWithStatus(session, step.command!);
+    final resolvedCommand = _resolveTemplateCommand(
+      step.command!,
+      packageManager: session.packageManager ?? 'unknown',
+      serviceName: session.config.host,
+    );
+    final result = await _executeCommandWithStatus(session, resolvedCommand);
     final finishedAt = DateTime.now();
 
     if (result.exitCode != 0) {
@@ -775,6 +895,16 @@ class TempSessionController {
         final packageManager = validation.packageManager ?? 'package manager';
         return 'El package manager $packageManager no está listo.';
     }
+  }
+
+  String _resolveTemplateCommand(
+    String command, {
+    required String packageManager,
+    required String serviceName,
+  }) {
+    return command
+        .replaceAll(r'${packageManager}', packageManager)
+        .replaceAll(r'${serviceName}', serviceName);
   }
 
   /// Utilidad interna para asegurar que la sesión existe y está conectada

@@ -6,6 +6,7 @@ import 'package:pro_tocol/view/pages/server_tabs/AppsManagerTab.dart';
 import 'package:pro_tocol/view/pages/server_tabs/ArchivosTab.dart';
 import 'package:pro_tocol/view/pages/server_tabs/MonitorTab.dart';
 import 'package:pro_tocol/view/pages/server_tabs/TerminalTab.dart';
+import 'package:pro_tocol/view/pages/server_tabs/TemplatesTab.dart';
 import 'package:xterm/xterm.dart';
 
 import 'package:pro_tocol/controller/ServerController.dart';
@@ -151,7 +152,7 @@ class _ServerPageState extends State<ServerPage> {
     final distroIcon = _getDistroIcon(distroName);
 
     return DefaultTabController(
-      length: widget.isTemporarySession ? 1 : 4,
+      length: widget.isTemporarySession ? 1 : 5,
       child: Scaffold(
         backgroundColor: AppColors.background,
         appBar: AppBar(
@@ -216,6 +217,7 @@ class _ServerPageState extends State<ServerPage> {
               Tab(text: 'Terminal'),
               Tab(text: 'Archivos'),
               Tab(text: 'Apps'),
+              Tab(text: 'Templates'),
             ],
           ),
         ),
@@ -228,6 +230,11 @@ class _ServerPageState extends State<ServerPage> {
             TerminalTab(terminal: terminal),
             ArchivosTab(activeServer: _activeServer),
             AppsManagerTab(
+              serverConfig: widget.serverConfig,
+              serverController: widget.serverController,
+              activeServer: _activeServer,
+            ),
+            TemplatesTab(
               serverConfig: widget.serverConfig,
               serverController: widget.serverController,
               activeServer: _activeServer,
