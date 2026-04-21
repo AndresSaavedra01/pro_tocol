@@ -2,90 +2,67 @@ import 'package:flutter/material.dart';
 import 'package:isar/isar.dart';
 import 'package:path_provider/path_provider.dart';
 
-// --- Entidades ---
-import 'package:pro_tocol/model/entities/DataBaseEntities.dart';
-
-// --- DAOs ---
-import 'package:pro_tocol/model/daos/ProfileDAO.dart';
-import 'package:pro_tocol/model/daos/ServerConfigDAO.dart';
-
-// --- Repositorios ---
-import 'package:pro_tocol/model/repositories/ProfileRepository.dart';
-import 'package:pro_tocol/model/repositories/ServerRepository.dart';
-import 'package:pro_tocol/model/repositories/TempSessionRepository.dart';
-
-// --- Controladores ---
-import 'package:pro_tocol/controller/ProfileController.dart';
-import 'package:pro_tocol/controller/ServerController.dart';
-import 'package:pro_tocol/controller/TempSessionController.dart';
-
-// --- Lógica (Tu rama) ---
-import 'package:pro_tocol/logic/command_history_manager.dart';
-
-// --- Enrutador (Predominante de develop) ---
-import 'package:pro_tocol/view/router/AppRouter.dart';
+// Importaciones de tus entidades y controladores
+import 'package:pro_tocol/entity/DataBaseEntities.dart';
+import 'package:pro_tocol/presentation/controllers/ProfileController.dart';
+import 'package:pro_tocol/presentation/controllers/NavigationController.dart';
+import 'package:pro_tocol/pages/profile_screen.dart';
+import 'package:pro_tocol/presentation/controllers/SSHOrchestrator.dart';
 
 void main() async {
-  // 1. Inicialización básica
+  // 1. Aseguramos que los bindings de Flutter estén listos para procesos asíncronos
   WidgetsFlutterBinding.ensureInitialized();
 
+  // 2. Configuramos la ruta de almacenamiento para Isar
   final dir = await getApplicationDocumentsDirectory();
+
+  // 3. Abrimos la base de datos con los esquemas de Perfil y Configuración de Servidor
   final isar = await Isar.open(
     [ProfileSchema, ServerConfigSchema],
     directory: dir.path,
   );
 
-  // 2. Inyección de Dependencias
-  final profileDAO = ProfileDAO(isar);
-  final serverConfigDAO = ServerConfigDAO(isar);
+  // 4. Instanciamos los controladores (nuestro "cerebro" global)
+  final profileController = ProfileController(isar: isar);
+  final navigationController = NavigationController();
+  final sshOrchestrator = SSHOrchestrator();
 
-  final profileRepository = ProfileRepository(profileDAO);
-  final serverRepository = ServerRepository(serverConfigDAO);
-  final tempSessionRepository = TempSessionRepository();
-
-  // Instanciamos tu nueva lógica
-  final commandHistoryManager = CommandHistoryManager();
-
-  // 3. Controladores (Adaptados para incluir el commandHistoryManager)
-  final profileController = ProfileController(profileRepository);
-  
-  // OJO: Aquí pasamos el commandHistoryManager como en tu rama local
-  final serverController = ServerController(
-    serverRepository, 
-    profileRepository, 
-    commandHistoryManager,
-  );
-  
-  final tempSessionController = TempSessionController(
-    tempSessionRepository, 
-    commandHistoryManager,
-  );
-
-  // 4. Enrutador (Estructura de develop)
-  final appRouter = AppRouter(
+  // 5. Corremos la App pasando los controladores por constructor
+  runApp(MyApp(
     profileController: profileController,
-    serverController: serverController,
-    tempSessionController: tempSessionController,
-  );
-
-  runApp(MyApp(appRouter: appRouter));
+    navigationController: navigationController,
+    sshOrchestrator: sshOrchestrator,
+  ));
 }
 
 class MyApp extends StatelessWidget {
-  final AppRouter appRouter;
+  final ProfileController profileController;
+  final NavigationController navigationController;
+  final SSHOrchestrator sshOrchestrator;
 
+  // El constructor ya no es 'const' porque recibe objetos que se crean en tiempo de ejecución
   const MyApp({
     super.key,
-    required this.appRouter,
+    required this.profileController,
+    required this.navigationController,
+    required this.sshOrchestrator
   });
 
   @override
   Widget build(BuildContext context) {
-    // Predomina el uso de routerConfig de develop
-    return MaterialApp.router(
-      title: 'Pro-Tocol SSH',
+    return MaterialApp(
+      title: 'Gestor de Perfiles',
       debugShowCheckedModeBanner: false,
-      routerConfig: appRouter.router,
+      theme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF8B63FF)),
+        useMaterial3: true,
+      ),
+      // 6. Inyectamos los controladores en la pantalla de entrada
+      home: ProfileScreen(
+        controller: profileController,
+        navigationController: navigationController,
+        sshOrchestrator: sshOrchestrator,
+      ),
     );
   }
 }

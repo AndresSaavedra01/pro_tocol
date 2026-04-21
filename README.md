@@ -27,7 +27,7 @@ El sistema permite la conexión a servidores mediante el protocolo SSH, organiza
 
 ---
 
-## Planificación: Sprint 0
+## Planificación: Sprint 1
 
 El objetivo de este primer bloque es establecer la base de conectividad, la persistencia de perfiles y la navegación visual básica.
 
@@ -43,7 +43,7 @@ El objetivo de este primer bloque es establecer la base de conectividad, la pers
 
 ---
 
-## Backlog del Sprint 0: Conectividad y Estructura Base
+## Backlog del Sprint 1: Conectividad y Estructura Base
 
 | ID | Rol | Historia de Usuario | Descripción / Criterios de Aceptación | SP |
 | :--- | :--- | :--- | :--- | :--- |
@@ -72,59 +72,3 @@ El objetivo de este primer bloque es establecer la base de conectividad, la pers
 * Las **Sesiones Temporales** no se persisten en la base de datos local; se eliminan al cerrar la aplicación o la sesión.
 * El **Explorador de Archivos** en el Sprint 1 se limita a la visualización de la estructura de directorios para asegurar estabilidad.
 * La arquitectura debe garantizar que las tres pestañas del servidor mantengan su estado independiente durante la conexión activa.
-
----
-
-
-
-## Planificación: Sprint 1
-El objetivo de este primer bloque es transformar el prototipo base de Pro-Tocol en una aplicación estable mediante la aplicación de estándares SOLID, garantizando un manejo de errores resiliente e implementando las capacidades núcleo de gestión visual (SFTP y Monitoreo de Hardware).
-
-
-### Alcance
-
-| Épica | Enfoque |
-|---|---|
-| **Refactorización del Código** | • Modularización<br>• SOLID/DRY<br>• Validaciones<br>• Manejo de errores<br>• Gestión de perfiles<br>• Pulido de UX. |
-| **Expansión de Nuevas Funcionalidades** | • Dashboard de Monitoreo<br>• Explorador SFTP<br>• Historial de Comandos<br>• Detección de Distro<br>• Instalador Gráfico<br>• Sistema de Templates. |
-
-
-### Fuera de Alcance (Sprint 1)
-
-- Entrenamiento de la IA
-- Conexión de IA
-- Asistente de IA integrado (Ollama)
-- Despliegue
-
-### Backlog del Sprint 1
-
-| ID | Rol | Historia de Usuario | Descripción / Criterios de Aceptación | SP |
-|---|---|---|---|---|
-| ES-34 | Dev A | Modularización | Reorganizar el proyecto en módulos claros (core, features, shared). Sin dependencias circulares. Modelos independientes de la UI. | 5 |
-| ES-35 | Dev A | Optimización DRY y SOLID | Eliminar código duplicado. Centralizar lógica SSH en un único Service. Clases con una sola responsabilidad (SRP). | 5 |
-| ES-36 | Dev A | Gestión Avanzada de Perfiles | Editar/eliminar perfiles con datos precargados. Diálogo de confirmación. Actualización inmediata en DB local. | 3 |
-| ES-37 | Dev B | Validación de Formularios | Validar formato IP/Dominio. Bloquear envío si faltan campos. Mensajes de error en rojo bajo el campo. | 2 |
-| ES-38 | Dev B | Gestión de Errores de Red | Capturar excepciones dartssh2 (Timeout, Auth Failed). Vista de error con botón "Reintentar". Log técnico para depuración. | 3 |
-| ES-39 | Dev B | Pulido de Interfaz (UX) | Animaciones de transición (Fade/Slide). Eliminar iconos sin funcionalidad. Corregir bug visual del cursor en terminal. | 2 |
-| ES-16 | Dev B | Dashboard de Monitoreo | CPU, RAM y Disco en tiempo real. Listado de procesos con opción kill. Estado de servicios Systemd. | 5 |
-| ES-18 | Dev C | Detección de Distro | Ejecutar `cat /etc/os-release` al conectar. Identificar apt/pacman/dnf. Mostrar logo de distro en el header. | 3 |
-| ES-40 | Dev C | Historial de Comandos | Guardar últimos 50 comandos en sesión. Navegar con flechas. Opción de limpiar historial. | 3 |
-| ES-41 | Dev C | Instalador Gráfico | Botones de instalar para apps comunes. Ejecución en segundo plano. Notificación de éxito o fallo. | 5 |
-| ES-12 | Dev A | Explorador SFTP Funcional | Subida de archivos por selector o drag & drop. Mover archivos entre directorios. Visualización de progreso. | 8 |
-| ES-20 | Dev C | Sistema de Templates | Checklist de validación antes de aplicar plantilla. Automatización de configuración básica. Reporte de cambios aplicados. | 5 |
-| **TOTAL** | | | Carga balanceada: Dev A (18), Dev B (12), Dev C (16) | **49** |
-
-### Criterios de Aceptación Generales (DoD)
-
-1. **Conexión Exitosa:** Se debe lograr el acceso a un servidor Linux real desde la app.
-2. **Persistencia:** Al reiniciar la app, los perfiles y servidores creados deben seguir ahí.
-3. **Multitarea:** Se debe poder abrir una terminal en una sesión temporal y otra en un servidor guardado simultáneamente.
-4. **Monitoreo:** La pestaña de monitoreo debe mostrar datos reales de CPU, RAM y Disco del servidor.
-5. **Navegación:** El explorador debe listar archivos de cualquier ruta solicitada (ej. `/etc` o `/var`).
-
-### Notas de Implementación
-
-- Las Sesiones Temporales no se persisten en la base de datos local; se eliminan al cerrar la aplicación o la sesión.
-- El Explorador de Archivos en el Sprint 1 se limita a la visualización de la estructura de directorios para asegurar estabilidad.
-- La arquitectura debe garantizar que las pestañas del servidor mantengan su estado independiente durante la conexión activa.
-
