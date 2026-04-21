@@ -401,6 +401,8 @@ EOF"''',
     final totalItems = totalValidations + totalSteps;
     final doneItems = doneValidations + doneSteps;
     final progress = totalItems == 0 ? 0.0 : doneItems / totalItems;
+    final result = _lastResult;
+    final summaryLines = result?.summaryLines ?? const <String>[];
 
     return Container(
       padding: const EdgeInsets.all(14),
@@ -419,6 +421,23 @@ EOF"''',
           Text('${(progress * 100).toStringAsFixed(0)}% completado', style: const TextStyle(color: AppColors.textMuted, fontSize: 11)),
           const SizedBox(height: 6),
           Text('Validaciones: $doneValidations/$totalValidations • Pasos: $doneSteps/$totalSteps', style: const TextStyle(color: AppColors.textSecondary, fontSize: 11)),
+          if (result != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Validaciones OK: ${result.successfulValidationCount} • Fallidas: ${result.failedValidationCount}',
+              style: const TextStyle(color: AppColors.textSecondary, fontSize: 11),
+            ),
+            Text(
+              'Pasos OK: ${result.successfulStepCount} • Fallidos: ${result.failedStepCount} • Omitidos: ${result.skippedStepCount}',
+              style: const TextStyle(color: AppColors.textSecondary, fontSize: 11),
+            ),
+            ...summaryLines.map(
+              (line) => Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(line, style: const TextStyle(color: AppColors.textMuted, fontSize: 11)),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -519,7 +538,8 @@ EOF"''',
   }
 
   Widget _buildLogCard() {
-    final lines = _lastResult?.logLines ?? const <String>[];
+    final result = _lastResult;
+    final lines = result?.logLines ?? const <String>[];
 
     return Container(
       padding: const EdgeInsets.all(14),
@@ -533,10 +553,19 @@ EOF"''',
         children: [
           const Text('Reporte final', style: TextStyle(color: AppColors.textPrimary, fontSize: 14, fontWeight: FontWeight.bold)),
           const SizedBox(height: 10),
-          if (_lastResult == null)
+          if (result == null)
             const Text('Aún no hay ejecución de template.', style: TextStyle(color: AppColors.textMuted, fontSize: 11))
           else ...[
-            Text(_lastResult!.success ? 'Ejecución completada con éxito.' : 'La ejecución terminó con errores.', style: TextStyle(color: _lastResult!.success ? AppColors.success : AppColors.error, fontSize: 11, fontWeight: FontWeight.w600)),
+            Text(result.success ? 'Ejecución completada con éxito.' : 'La ejecución terminó con errores.', style: TextStyle(color: result.success ? AppColors.success : AppColors.error, fontSize: 11, fontWeight: FontWeight.w600)),
+            const SizedBox(height: 6),
+            Text(
+              'Validaciones OK: ${result.successfulValidationCount} • Fallidas: ${result.failedValidationCount}',
+              style: const TextStyle(color: AppColors.textSecondary, fontSize: 11),
+            ),
+            Text(
+              'Pasos OK: ${result.successfulStepCount} • Fallidos: ${result.failedStepCount} • Omitidos: ${result.skippedStepCount}',
+              style: const TextStyle(color: AppColors.textSecondary, fontSize: 11),
+            ),
             const SizedBox(height: 8),
             Container(
               constraints: const BoxConstraints(maxHeight: 180),

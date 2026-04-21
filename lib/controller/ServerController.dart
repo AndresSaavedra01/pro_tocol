@@ -25,6 +25,7 @@ class ServerController {
   final Map<int, ValueNotifier<Map<String, AppInstallState>>> _appInstallNotifiers = {};
   final Map<int, List<ManagedApp>> _appsSearchResults = {};
   final Map<int, ValueNotifier<List<ManagedApp>>> _appsSearchNotifiers = {};
+  final Set<int> _activeTemplateRuns = {};
   static const String _exitCodeMarker = '__PROTOCOL_EXIT_CODE:';
 
   ServerController(this._serverRepository, this._profileRepository, this._commandHistoryManager);
@@ -723,88 +724,19 @@ class ServerController {
       TemplateStep? activeStep,
     )? onProgress,
   }) async {
-    final server = getActiveServer(serverId);
-    final startedAt = DateTime.now();
-    final validationResults = <TemplateValidationResult>[];
-    final results = <TemplateStepResult>[];
-    String? failedStepId;
-    String? failedValidationId;
-
-    _emitTemplateProgress(
-      onProgress,
-      template,
-      startedAt,
-      validationResults,
-      results,
-      activeValidation: null,
-      activeStep: null,
-      failedStepId: failedStepId,
-      failedValidationId: failedValidationId,
-      success: false,
-    );
-
-    final validations = await _runTemplateValidations(server, template.validationRequirements);
-    validationResults.addAll(validations);
-    _emitTemplateProgress(
-      onProgress,
-      template,
-      startedAt,
-      validationResults,
-      results,
-      activeValidation: null,
-      activeStep: null,
-      failedStepId: failedStepId,
-      failedValidationId: failedValidationId,
-      success: false,
-    );
-
-    final blockingFailure = _firstBlockingValidationFailure(validationResults, template.validationRequirements);
-
-    if (blockingFailure != null) {
-      failedValidationId = blockingFailure.$1;
-      _appendSkippedStepsAfterValidationFailure(results, template.steps, blockingFailure.$1);
-      _emitTemplateProgress(
-        onProgress,
-        template,
-        startedAt,
-        validationResults,
-        results,
-        activeValidation: null,
-        activeStep: null,
-        failedStepId: failedStepId,
-        failedValidationId: failedValidationId,
-        success: false,
-      );
-
-      return TemplateRunResult(
-        templateId: template.id,
-        templateName: template.name,
-        success: false,
-        startedAt: startedAt,
-        finishedAt: DateTime.now(),
-        validationResults: validationResults,
-        failedValidationId: failedValidationId,
-        failedStepId: failedStepId,
-        stepResults: results,
-      );
+    if (_activeTemplateRuns.contains(serverId)) {
+      throw StateError('Ya hay un template en ejecución para este servidor.');
     }
 
-    for (final step in template.steps) {
-      _emitTemplateProgress(
-        onProgress,
-        template,
-        startedAt,
-        validationResults,
-        results,
-        activeValidation: null,
-        activeStep: step,
-        failedStepId: failedStepId,
-        failedValidationId: failedValidationId,
-        success: false,
-      );
+    _activeTemplateRuns.add(serverId);
+    try {
+      final server = getActiveServer(serverId);
+      final startedAt = DateTime.now();
+      final validationResults = <TemplateValidationResult>[];
+      final results = <TemplateStepResult>[];
+      String? failedStepId;
+      String? failedValidationId;
 
-      final stepResult = await _executeTemplateStep(server, step);
-      results.add(stepResult);
       _emitTemplateProgress(
         onProgress,
         template,
@@ -818,9 +750,26 @@ class ServerController {
         success: false,
       );
 
-      if (stepResult.status == TemplateStepStatus.failure && step.isCritical) {
-        failedStepId = step.id;
-        _appendSkippedStepsAfterFailure(results, template.steps, step.id);
+      final validations = await _runTemplateValidations(server, template.validationRequirements);
+      validationResults.addAll(validations);
+      _emitTemplateProgress(
+        onProgress,
+        template,
+        startedAt,
+        validationResults,
+        results,
+        activeValidation: null,
+        activeStep: null,
+        failedStepId: failedStepId,
+        failedValidationId: failedValidationId,
+        success: false,
+      );
+
+      final blockingFailure = _firstBlockingValidationFailure(validationResults, template.validationRequirements);
+
+      if (blockingFailure != null) {
+        failedValidationId = blockingFailure.$1;
+        _appendSkippedStepsAfterValidationFailure(results, template.steps, blockingFailure.$1);
         _emitTemplateProgress(
           onProgress,
           template,
@@ -833,24 +782,85 @@ class ServerController {
           failedValidationId: failedValidationId,
           success: false,
         );
-        break;
+
+        return TemplateRunResult(
+          templateId: template.id,
+          templateName: template.name,
+          success: false,
+          startedAt: startedAt,
+          finishedAt: DateTime.now(),
+          validationResults: validationResults,
+          failedValidationId: failedValidationId,
+          failedStepId: failedStepId,
+          stepResults: results,
+        );
       }
+
+      for (final step in template.steps) {
+        _emitTemplateProgress(
+          onProgress,
+          template,
+          startedAt,
+          validationResults,
+          results,
+          activeValidation: null,
+          activeStep: step,
+          failedStepId: failedStepId,
+          failedValidationId: failedValidationId,
+          success: false,
+        );
+
+        final stepResult = await _executeTemplateStep(server, step);
+        results.add(stepResult);
+        _emitTemplateProgress(
+          onProgress,
+          template,
+          startedAt,
+          validationResults,
+          results,
+          activeValidation: null,
+          activeStep: null,
+          failedStepId: failedStepId,
+          failedValidationId: failedValidationId,
+          success: false,
+        );
+
+        if (stepResult.status == TemplateStepStatus.failure && step.isCritical) {
+          failedStepId = step.id;
+          _appendSkippedStepsAfterFailure(results, template.steps, step.id);
+          _emitTemplateProgress(
+            onProgress,
+            template,
+            startedAt,
+            validationResults,
+            results,
+            activeValidation: null,
+            activeStep: null,
+            failedStepId: failedStepId,
+            failedValidationId: failedValidationId,
+            success: false,
+          );
+          break;
+        }
+      }
+
+      final finishedAt = DateTime.now();
+      final success = failedStepId == null && !results.any((result) => result.status == TemplateStepStatus.failure);
+
+      return TemplateRunResult(
+        templateId: template.id,
+        templateName: template.name,
+        success: success,
+        startedAt: startedAt,
+        finishedAt: finishedAt,
+        validationResults: validationResults,
+        failedStepId: failedStepId,
+        failedValidationId: failedValidationId,
+        stepResults: results,
+      );
+    } finally {
+      _activeTemplateRuns.remove(serverId);
     }
-
-    final finishedAt = DateTime.now();
-    final success = failedStepId == null && !results.any((result) => result.status == TemplateStepStatus.failure);
-
-    return TemplateRunResult(
-      templateId: template.id,
-      templateName: template.name,
-      success: success,
-      startedAt: startedAt,
-      finishedAt: finishedAt,
-      validationResults: validationResults,
-      failedStepId: failedStepId,
-      failedValidationId: failedValidationId,
-      stepResults: results,
-    );
   }
 
   void _emitTemplateProgress(

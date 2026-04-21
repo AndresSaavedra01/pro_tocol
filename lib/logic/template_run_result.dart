@@ -63,6 +63,33 @@ class TemplateRunResult {
 
   bool get hasFailures => stepResults.any((result) => result.status == TemplateStepStatus.failure);
 
+    bool get hasBlockingFailure => failedValidationId != null || failedStepId != null;
+
+    int get successfulValidationCount =>
+      validationResults.where((result) => result.status == TemplateValidationStatus.success).length;
+
+    int get failedValidationCount =>
+      validationResults.where((result) => result.status == TemplateValidationStatus.failure).length;
+
+    int get successfulStepCount =>
+      stepResults.where((result) => result.status == TemplateStepStatus.success).length;
+
+    int get failedStepCount =>
+      stepResults.where((result) => result.status == TemplateStepStatus.failure).length;
+
+    int get skippedStepCount =>
+      stepResults.where((result) => result.status == TemplateStepStatus.skipped).length;
+
+    List<String> get summaryLines => [
+      'Template: $templateName',
+      'Estado: ${success ? 'Exitoso' : 'Con fallos'}',
+      'Duración: ${duration.inSeconds}s',
+      'Validaciones: $successfulValidationCount OK / $failedValidationCount Fallidas',
+      'Pasos: $successfulStepCount OK / $failedStepCount Fallidos / $skippedStepCount Omitidos',
+      if (failedValidationId != null) 'Validación fallida: $failedValidationId',
+      if (failedStepId != null) 'Paso fallido: $failedStepId',
+      ];
+
   List<String> get logLines => [
         ...validationResults.map((result) {
           final statusLabel = result.status.name.toUpperCase();
