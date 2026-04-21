@@ -10,6 +10,9 @@ import 'package:pro_tocol/logic/apps_manager_catalog.dart';
 import 'package:pro_tocol/logic/apps_manager_state.dart';
 import 'package:pro_tocol/logic/command_history_manager.dart';
 import 'package:pro_tocol/logic/package_install_command_builder.dart';
+import 'package:pro_tocol/logic/template_model.dart';
+import 'package:pro_tocol/logic/template_run_result.dart';
+import 'package:pro_tocol/logic/template_step.dart';
 
 class ServerController {
   final ServerRepository _serverRepository;
@@ -709,6 +712,107 @@ class ServerController {
       () => ValueNotifier<List<ManagedApp>>(const []),
     );
     notifier.value = List.unmodifiable(_appsSearchResults[serverId]!);
+  }
+
+  Future<TemplateRunResult> runTemplate({
+    required int serverId,
+    required TemplateModel template,
+  }) async {
+    final server = getActiveServer(serverId);
+    final startedAt = DateTime.now();
+    final results = <TemplateStepResult>[];
+    String? failedStepId;
+
+    for (final step in template.steps) {
+      final stepResult = await _executeTemplateStep(server, step);
+      results.add(stepResult);
+
+      if (stepResult.status == TemplateStepStatus.failure && step.isCritical) {
+        failedStepId = step.id;
+        _appendSkippedStepsAfterFailure(results, template.steps, step.id);
+        break;
+      }
+    }
+
+    final finishedAt = DateTime.now();
+    final success = failedStepId == null && !results.any((result) => result.status == TemplateStepStatus.failure);
+
+    return TemplateRunResult(
+      templateId: template.id,
+      templateName: template.name,
+      success: success,
+      startedAt: startedAt,
+      finishedAt: finishedAt,
+      failedStepId: failedStepId,
+      stepResults: results,
+    );
+  }
+
+  Future<TemplateStepResult> _executeTemplateStep(Server server, TemplateStep step) async {
+    final startedAt = DateTime.now();
+
+    if (step.command == null || step.command!.trim().isEmpty) {
+      final status = step.isCritical ? TemplateStepStatus.failure : TemplateStepStatus.skipped;
+      return TemplateStepResult(
+        stepId: step.id,
+        title: step.title,
+        kind: step.kind,
+        status: status,
+        startedAt: startedAt,
+        finishedAt: DateTime.now(),
+        error: step.isCritical ? 'El paso no tiene comando definido.' : 'Paso omitido.',
+      );
+    }
+
+    final result = await _executeCommandWithStatus(server, step.command!);
+    final finishedAt = DateTime.now();
+
+    if (result.exitCode != 0) {
+      return TemplateStepResult(
+        stepId: step.id,
+        title: step.title,
+        kind: step.kind,
+        status: TemplateStepStatus.failure,
+        startedAt: startedAt,
+        finishedAt: finishedAt,
+        output: result.output,
+        error: result.output.isEmpty ? 'Fallo al ejecutar el paso (${result.exitCode}).' : result.output,
+      );
+    }
+
+    return TemplateStepResult(
+      stepId: step.id,
+      title: step.title,
+      kind: step.kind,
+      status: TemplateStepStatus.success,
+      startedAt: startedAt,
+      finishedAt: finishedAt,
+      output: result.output,
+    );
+  }
+
+  void _appendSkippedStepsAfterFailure(
+    List<TemplateStepResult> results,
+    List<TemplateStep> steps,
+    String failedStepId,
+  ) {
+    final failedIndex = steps.indexWhere((step) => step.id == failedStepId);
+    if (failedIndex == -1) return;
+
+    final skippedAt = DateTime.now();
+    for (final step in steps.skip(failedIndex + 1)) {
+      results.add(
+        TemplateStepResult(
+          stepId: step.id,
+          title: step.title,
+          kind: step.kind,
+          status: TemplateStepStatus.skipped,
+          startedAt: skippedAt,
+          finishedAt: skippedAt,
+          error: 'Omitido por fallo crítico en un paso anterior.',
+        ),
+      );
+    }
   }
 
   /// Utilidad interna para asegurar que operamos sobre un servidor activo
