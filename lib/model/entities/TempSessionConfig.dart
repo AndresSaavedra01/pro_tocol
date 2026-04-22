@@ -12,13 +12,13 @@ class TempSessionConfig implements GeneralConfig {
   @override
   String? password;
   @override
-  String? privateKey;
+  String? keyPairId;
 
   TempSessionConfig({
     required this.host,
     required this.username,
     this.port = 22,
     required this.password,
-    this.privateKey
+    this.keyPairId
   });
 }

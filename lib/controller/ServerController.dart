@@ -37,9 +37,9 @@ class ServerController {
     required String username,
     required int port,
     String? password,
-    String? privateKey,
+    String? keyPairId,
   }) async {
-    _validateServerInputs(host, username, port, password, privateKey);
+    _validateServerInputs(host, username, port, password, keyPairId);
 
     // Verificamos que el perfil exista antes de crear el servidor
     final profile = await _profileRepository.getProfileById(profileId);
@@ -52,7 +52,7 @@ class ServerController {
       ..username = username.trim()
       ..port = port
       ..password = password
-      ..privateKey = privateKey;
+      ..keyPairId = keyPairId;
 
     // Guarda el servidor y lo vincula al perfil usando tu DAO
     await _profileRepository.addServerToProfile(profileId, newConfig);
@@ -76,7 +76,7 @@ class ServerController {
     try {
       // Usamos el servicio interno para conectar.
       // Al implementar GeneralConfig, config pasa directo sin problemas.
-      await server.sshService.connect(config);
+      //await server.sshService.connectWithKey(config);
 
       // Si fue exitoso, lo guardamos en las conexiones activas
       _activeConnections[serverId] = server;
@@ -1202,7 +1202,7 @@ class ServerController {
 
   /// Actualiza una configuración de servidor existente
   Future<void> updateServer(ServerConfig config) async {
-    _validateServerInputs(config.host, config.username, config.port, config.password, config.privateKey);
+    _validateServerInputs(config.host, config.username, config.port, config.password, config.keyPairId);
     // Isar maneja la actualización automáticamente si el ID ya existe usando put()
     await _serverRepository.saveServerConfig(config);
   }

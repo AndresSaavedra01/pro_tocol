@@ -32,17 +32,17 @@ class TempSessionController {
     required String username,
     required int port,
     String? password,
-    String? privateKey,
+    String? keyPairId,
   }) async {
     // Validamos los campos igual que en el servidor persistente
-    _validateInputs(host, username, port, password, privateKey);
+    _validateInputs(host, username, port, password, keyPairId);
 
     // Creamos la configuración volátil
     final config = TempSessionConfig(password: password,
         host: host,
         username: username,
         port: port,
-        privateKey: privateKey
+        keyPairId: keyPairId
     );
 
 
@@ -51,7 +51,7 @@ class TempSessionController {
 
     try {
       // Intentamos la conexión SSH
-      await session.sshService.connect(config);
+      await session.sshService.connectWithPassword(config);
 
       // Si tiene éxito, la guardamos en nuestro mapa de sesiones activas
       // Usamos el host como llave temporal o un hash de la config

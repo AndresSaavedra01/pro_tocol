@@ -17,9 +17,12 @@ class SSHService {
 
   SFTPService? get sftp => _sftpService;
 
-  Future<bool> connect(GeneralConfig details) async {
+// ------------------------------------------------------------------
+  // 1. CONEXIÓN MEDIANTE CONTRASEÑA
+  // ------------------------------------------------------------------
+  Future<bool> connectWithPassword(GeneralConfig details) async {
     try {
-      this.config = details;
+      config = details;
 
       final socket = await SSHSocket.connect(
         details.host,
@@ -27,24 +30,47 @@ class SSHService {
         timeout: const Duration(seconds: 10),
       );
 
-      List<SSHKeyPair> identities = [];
-      String? Function()? passwordHandler;
+      _client = SSHClient(
+        socket,
+        username: details.username,
+        // Solo usamos la contraseña
+        onPasswordRequest: () => details.password,
+      );
 
-      if (details.privateKey != null && details.privateKey!.trim().isNotEmpty) {
-        identities = SSHKeyPair.fromPem(details.privateKey!);
-      } else if (details.password != null && details.password!.isNotEmpty) {
-        passwordHandler = () => details.password;
-      }
+      _sftpService = SFTPService(_client!);
+      return true;
+    } catch (e) {
+      _cleanup();
+      rethrow;
+    }
+  }
+
+  // ------------------------------------------------------------------
+  // 2. CONEXIÓN MEDIANTE LLAVE PRIVADA (RSA / Ed25519)
+  // ------------------------------------------------------------------
+  /// Recibe los detalles del servidor y el contenido PEM de la llave privada
+  Future<bool> connectWithKey(GeneralConfig details, String privateKeyPem) async {
+    try {
+      config = details;
+
+      final socket = await SSHSocket.connect(
+        details.host,
+        details.port,
+        timeout: const Duration(seconds: 10),
+      );
+
+      // Parseamos el texto (PEM) de la llave privada
+      final identities = SSHKeyPair.fromPem(privateKeyPem);
 
       _client = SSHClient(
         socket,
         username: details.username,
-        onPasswordRequest: passwordHandler,
-        identities: identities,
+        identities: identities, // Usamos la identidad parseada
+        // Opcional: Fallback a contraseña si la llave falla o requiere 2FA
+        onPasswordRequest: () => details.password,
       );
 
       _sftpService = SFTPService(_client!);
-
       return true;
     } catch (e) {
       _cleanup();
@@ -214,4 +240,6 @@ class SSHService {
     _sftpService = null;
     config = null;
   }
+
+
 }

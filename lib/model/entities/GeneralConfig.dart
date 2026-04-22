@@ -4,5 +4,5 @@ abstract class GeneralConfig {
   String get username;
   int get port;
   String? get password;
-  String? get privateKey;
+  String? get keyPairId;
 }

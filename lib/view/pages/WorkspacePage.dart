@@ -95,7 +95,7 @@ class _WorkspacePageState extends State<WorkspacePage> {
         username: config.username,
         port: config.port,
         password: config.password,
-        privateKey: config.privateKey,
+        keyPairId: config.keyPairId,
       );
 
       if (mounted) setState(() => _currentView = ViewType.tempSessionView);
