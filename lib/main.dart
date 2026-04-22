@@ -5,25 +5,11 @@ import 'package:path_provider/path_provider.dart';
 // --- Entidades ---
 import 'package:pro_tocol/model/entities/DataBaseEntities.dart';
 
-// --- DAOs ---
-import 'package:pro_tocol/model/daos/ProfileDAO.dart';
-import 'package:pro_tocol/model/daos/ServerConfigDAO.dart';
-
-// --- Repositorios ---
-import 'package:pro_tocol/model/repositories/ProfileRepository.dart';
-import 'package:pro_tocol/model/repositories/ServerRepository.dart';
-import 'package:pro_tocol/model/repositories/TempSessionRepository.dart';
-
-// --- Controladores ---
-import 'package:pro_tocol/controller/ProfileController.dart';
-import 'package:pro_tocol/controller/ServerController.dart';
-import 'package:pro_tocol/controller/TempSessionController.dart';
-
-// --- Lógica (Tu rama) ---
-import 'package:pro_tocol/logic/command_history_manager.dart';
-
-// --- Enrutador (Predominante de develop) ---
+// --- Enrutador ---
 import 'package:pro_tocol/view/router/AppRouter.dart';
+
+// --- Inyección de Dependencias ---
+import 'injection.dart'; // Asegúrate de importar el archivo que acabamos de crear
 
 void main() async {
   // 1. Inicialización básica
@@ -35,38 +21,23 @@ void main() async {
     directory: dir.path,
   );
 
-  // 2. Inyección de Dependencias
-  final profileDAO = ProfileDAO(isar);
-  final serverConfigDAO = ServerConfigDAO(isar);
+  // 2. Inicializar el contenedor de dependencias (GetIt)
+  await setupDependencies(isar);
 
-  final profileRepository = ProfileRepository(profileDAO);
-  final serverRepository = ServerRepository(serverConfigDAO);
-  final tempSessionRepository = TempSessionRepository();
+  // 3. Enrutador
+  // Lo ideal es que entres a tu AppRouter.dart y le quites
+  // los controladores del constructor, dejándolo limpio así:
+  final appRouter = AppRouter();
 
-  // Instanciamos tu nueva lógica
-  final commandHistoryManager = CommandHistoryManager();
-
-  // 3. Controladores (Adaptados para incluir el commandHistoryManager)
-  final profileController = ProfileController(profileRepository);
-  
-  // OJO: Aquí pasamos el commandHistoryManager como en tu rama local
-  final serverController = ServerController(
-    serverRepository, 
-    profileRepository, 
-    commandHistoryManager,
-  );
-  
-  final tempSessionController = TempSessionController(
-    tempSessionRepository, 
-    commandHistoryManager,
-  );
-
-  // 4. Enrutador (Estructura de develop)
-  final appRouter = AppRouter(
-    profileController: profileController,
-    serverController: serverController,
-    tempSessionController: tempSessionController,
-  );
+  /* * NOTA: Si mientras refactorizas, tu AppRouter TODAVÍA pide
+   * los controladores en el constructor y da error, puedes pasar
+   * temporalmente las dependencias desde GetIt de la siguiente forma:
+   * * final appRouter = AppRouter(
+   * profileController: getIt<ProfileController>(),
+   * serverController: getIt<ServerConnectionController>(), // O tu fachada temporal
+   * tempSessionController: getIt<TempSessionController>(),
+   * );
+   */
 
   runApp(MyApp(appRouter: appRouter));
 }
@@ -81,7 +52,6 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Predomina el uso de routerConfig de develop
     return MaterialApp.router(
       title: 'Pro-Tocol SSH',
       debugShowCheckedModeBanner: false,

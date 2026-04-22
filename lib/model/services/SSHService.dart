@@ -10,17 +10,15 @@ import '../entities/ServerMetrics.dart';
 class SSHService {
   SSHClient? _client;
   SFTPService? _sftpService;
-
   GeneralConfig? config;
 
   bool get isConnected => _client != null;
-
   SFTPService? get sftp => _sftpService;
 
-  Future<bool> connect(GeneralConfig details) async {
+  // MÉTODO UNIFICADO: Ahora acepta opcionalmente el contenido de la llave privada
+  Future<bool> connect(GeneralConfig details, {String? privateKeyPem}) async {
     try {
-      this.config = details;
-
+      config = details;
       final socket = await SSHSocket.connect(
         details.host,
         details.port,
@@ -30,9 +28,12 @@ class SSHService {
       List<SSHKeyPair> identities = [];
       String? Function()? passwordHandler;
 
-      if (details.privateKey != null && details.privateKey!.trim().isNotEmpty) {
-        identities = SSHKeyPair.fromPem(details.privateKey!);
-      } else if (details.password != null && details.password!.isNotEmpty) {
+      // Si recibimos el CONTENIDO de la llave (PEM), lo usamos
+      if (privateKeyPem != null && privateKeyPem.isNotEmpty) {
+        identities = SSHKeyPair.fromPem(privateKeyPem);
+      }
+      // Si no, usamos la contraseña
+      else if (details.password != null && details.password!.isNotEmpty) {
         passwordHandler = () => details.password;
       }
 
@@ -44,12 +45,16 @@ class SSHService {
       );
 
       _sftpService = SFTPService(_client!);
-
       return true;
     } catch (e) {
       _cleanup();
       rethrow;
     }
+  }
+
+  // Helper para cuando quieres conectar específicamente solo con contraseña (útil para el Manager)
+  Future<bool> connectWithPassword(GeneralConfig details) async {
+    return await connect(details, privateKeyPem: null);
   }
 
   Future<String> runSingleCommand(String command) async {
@@ -214,4 +219,6 @@ class SSHService {
     _sftpService = null;
     config = null;
   }
+
+
 }

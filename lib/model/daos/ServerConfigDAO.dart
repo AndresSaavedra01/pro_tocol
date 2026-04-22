@@ -14,6 +14,9 @@ class ServerConfigDAO {
     });
   }
 
+  Future<ServerConfig?> getServerConfigById(Id id) async {
+    return await isar.serverConfigs.get(id);
+  }
   // Buscar servidores por host (ejemplo de query personalizada)
   Future<List<ServerConfig>> findServersByHost(String host) async {
     return await isar.serverConfigs

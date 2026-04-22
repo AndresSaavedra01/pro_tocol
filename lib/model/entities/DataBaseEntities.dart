@@ -26,7 +26,7 @@ class ServerConfig implements GeneralConfig {
   @override
   String? password;
   @override
-  String? privateKey;
+  String? keyPairId;
 
   @Backlink(to: 'servers')
   final profile = IsarLink<Profile>();

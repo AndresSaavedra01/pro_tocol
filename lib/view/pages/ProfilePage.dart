@@ -1,23 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:pro_tocol/controller/TempSessionController.dart';
 import 'package:pro_tocol/model/entities/DataBaseEntities.dart';
 import 'package:pro_tocol/controller/ProfileController.dart';
-import 'package:pro_tocol/controller/ServerController.dart';
 
+import '../../injection.dart';
 import '../theme/AppColors.dart';
 
 class ProfilePage extends StatefulWidget {
-  final ProfileController profileController;
-  final ServerController serverController;
-  final TempSessionController tempSessionController;
+
 
   const ProfilePage({
     super.key,
-    required this.profileController,
-    required this.serverController,
-    required this.tempSessionController
   });
+
+  ProfileController get profileController => getIt<ProfileController>();
 
   @override
   State<ProfilePage> createState() => _ProfileScreenState();

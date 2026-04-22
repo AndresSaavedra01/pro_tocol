@@ -2,9 +2,10 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:pro_tocol/controller/ServerAppsController.dart';
+import 'package:pro_tocol/injection.dart';
 import 'package:pro_tocol/logic/apps_manager_catalog.dart';
 import 'package:pro_tocol/logic/apps_manager_state.dart';
-import 'package:pro_tocol/controller/ServerController.dart';
 import 'package:pro_tocol/model/entities/Server.dart';
 
 import '../../../model/entities/DataBaseEntities.dart';
@@ -12,18 +13,17 @@ import '../../theme/AppColors.dart';
 
 class AppsManagerTab extends StatefulWidget {
   final ServerConfig serverConfig;
-  final ServerController serverController;
   final Server? activeServer;
 
   const AppsManagerTab({
     super.key,
     required this.serverConfig,
-    required this.serverController,
     required this.activeServer,
   });
 
   @override
   State<AppsManagerTab> createState() => _AppsManagerTabState();
+  ServerAppsController get _appsController => getIt<ServerAppsController>();
 }
 
 class _AppsManagerTabState extends State<AppsManagerTab> {
@@ -40,9 +40,9 @@ class _AppsManagerTabState extends State<AppsManagerTab> {
   @override
   void initState() {
     super.initState();
-    _appInstallStatesListenable = widget.serverController.installStatesListenable(widget.serverConfig.id);
-    _appsSearchResultsListenable = widget.serverController.searchResultsListenable(widget.serverConfig.id);
-    _previousAppInstallStates = Map<String, AppInstallState>.from(widget.serverController.getInstallStates(widget.serverConfig.id));
+    _appInstallStatesListenable = widget._appsController.installStatesListenable(widget.serverConfig.id);
+    _appsSearchResultsListenable = widget._appsController.searchResultsListenable(widget.serverConfig.id);
+    _previousAppInstallStates = Map<String, AppInstallState>.from(widget._appsController.getInstallStates(widget.serverConfig.id));
     _appInstallStatesListenable.addListener(_handleAppInstallStateChanged);
   }
 
@@ -90,7 +90,7 @@ class _AppsManagerTabState extends State<AppsManagerTab> {
     final id = ++_searchRequestId;
     if (mounted) setState(() => _isAppsSearchInProgress = true);
     try {
-      await widget.serverController.searchApps(serverId: widget.serverConfig.id, query: query);
+      await widget._appsController.searchApps(serverId: widget.serverConfig.id, query: query);
     } finally {
       if (!mounted || id != _searchRequestId) return;
       setState(() => _isAppsSearchInProgress = false);
@@ -108,7 +108,7 @@ class _AppsManagerTabState extends State<AppsManagerTab> {
     if (_isAppsStatusSyncInProgress) return;
     if (mounted) setState(() => _isAppsStatusSyncInProgress = true);
     try {
-      await widget.serverController.refreshInstalledApps(serverId: widget.serverConfig.id);
+      await widget._appsController.refreshInstalledApps(serverId: widget.serverConfig.id);
     } catch (_) {
     } finally {
       if (mounted) setState(() => _isAppsStatusSyncInProgress = false);
@@ -226,9 +226,9 @@ class _AppsManagerTabState extends State<AppsManagerTab> {
           ElevatedButton(
             onPressed: canRunAction ? () {
               if (isInstalled) {
-                widget.serverController.uninstallAppInBackground(serverId: widget.serverConfig.id, appId: app.id, packageName: app.packageName);
+                widget._appsController.uninstallAppInBackground(serverId: widget.serverConfig.id, appId: app.id, packageName: app.packageName);
               } else {
-                widget.serverController.installAppInBackground(serverId: widget.serverConfig.id, appId: app.id, packageName: app.packageName);
+                widget._appsController.installAppInBackground(serverId: widget.serverConfig.id, appId: app.id, packageName: app.packageName);
               }
             } : null,
             style: ElevatedButton.styleFrom(backgroundColor: btnColor, disabledBackgroundColor: AppColors.border, foregroundColor: AppColors.textPrimary, padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10)),

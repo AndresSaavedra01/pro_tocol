@@ -17,6 +17,10 @@ class ServerRepository {
     return await _serverConfigDAO.deleteServer(id);
   }
 
+  Future<ServerConfig?> getServerConfigById(Id id) async {
+    // Llama al método correspondiente en tu DAO para buscar por ID
+    return await _serverConfigDAO.getServerConfigById(id);
+  }
 
   Server buildServerFromConfig(ServerConfig config) {
     return Server(config: config);

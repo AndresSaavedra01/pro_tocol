@@ -1,17 +1,27 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:file_picker/file_picker.dart'; // IMPORTANTE
 
 class ConnectionFormDialog extends StatefulWidget {
   final String title;
   final String subtitle;
   final String buttonText;
-  
-  // VARIABLES OPCIONALES PARA MODO EDICIÓN
+
   final String? initialHost;
   final String? initialUser;
   final String? initialPass;
-  final String? initialName;
+  final int? initialPort;
+  final String? initialKeyId;
 
-  final void Function(String host, String username, String password, int port) onSubmit;
+  // Actualizamos la firma para que también pueda devolver la llave pública si se ingresa
+  final void Function(
+      String host,
+      String username,
+      String? password,
+      int port,
+      String? privateKey,
+      String? publicKey, // NUEVO PARÁMETRO
+      ) onSubmit;
 
   const ConnectionFormDialog({
     super.key,
@@ -22,7 +32,8 @@ class ConnectionFormDialog extends StatefulWidget {
     this.initialHost,
     this.initialUser,
     this.initialPass,
-    this.initialName,
+    this.initialPort,
+    this.initialKeyId,
   });
 
   @override
@@ -32,281 +43,249 @@ class ConnectionFormDialog extends StatefulWidget {
 class _ConnectionFormDialogState extends State<ConnectionFormDialog> {
   final _formKey = GlobalKey<FormState>();
 
-  bool isPasswordSelected = true;
+  bool usePassword = true;
   bool isPasswordVisible = false;
 
   late TextEditingController _ipController;
   late TextEditingController _userController;
   late TextEditingController _passController;
-  late TextEditingController _nameController; 
+  late TextEditingController _portController;
+  late TextEditingController _privKeyController;
+  late TextEditingController _pubKeyController; // Controlador para llave pública
 
   @override
   void initState() {
     super.initState();
-    // PRECARGAMOS LOS DATOS EN LOS CAMPOS DE TEXTO
     _ipController = TextEditingController(text: widget.initialHost ?? '');
     _userController = TextEditingController(text: widget.initialUser ?? '');
     _passController = TextEditingController(text: widget.initialPass ?? '');
-    _nameController = TextEditingController(text: widget.initialName ?? '');
+    _portController = TextEditingController(text: (widget.initialPort ?? 22).toString());
+    _privKeyController = TextEditingController();
+    _pubKeyController = TextEditingController();
+
+    if (widget.initialKeyId != null) {
+      usePassword = false;
+    }
   }
 
-  @override
-  void dispose() {
-    _ipController.dispose();
-    _userController.dispose();
-    _passController.dispose();
-    _nameController.dispose();
-    super.dispose();
-  }
+  // MÉTODO PARA CARGAR ARCHIVOS
+  Future<void> _pickKeyFile(TextEditingController controller) async {
+    try {
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.any, // Algunas llaves no tienen extensión .txt
+      );
 
-  String? _validateIpOrDomain(String? value) {
-    if (value == null || value.trim().isEmpty) {
-      return 'La IP o Dominio es obligatoria';
+      if (result != null && result.files.single.path != null) {
+        final file = File(result.files.single.path!);
+        final content = await file.readAsString();
+        setState(() {
+          controller.text = content.trim();
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Error al leer el archivo: $e"), backgroundColor: Colors.red),
+        );
+      }
     }
-    final ipRegExp = RegExp(r'^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$');
-    final domainRegExp = RegExp(r'^([a-zA-Z0-9]+(-[a-zA-Z0-9]+)*\.)+[a-zA-Z]{2,}$');
-    
-    if (!ipRegExp.hasMatch(value.trim()) && !domainRegExp.hasMatch(value.trim())) {
-      return 'Formato de IP o Dominio invalido';
-    }
-    return null;
-  }
-
-  String? _validateRequired(String? value, String fieldName) {
-    if (value == null || value.trim().isEmpty) {
-      return '$fieldName es obligatorio';
-    }
-    return null;
   }
 
   @override
   Widget build(BuildContext context) {
-    return Dialog(
-      backgroundColor: Colors.transparent,
-      insetPadding: const EdgeInsets.all(16),
-      child: Container(
-        padding: const EdgeInsets.all(24),
-        decoration: BoxDecoration(
-          color: const Color(0xFF151821),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.white10),
-        ),
-        child: SingleChildScrollView(
-          child: Form(
-            key: _formKey,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Center(
-                        child: Text(
-                          widget.title,
-                          style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                    ),
-                    GestureDetector(
-                      onTap: () => Navigator.pop(context),
-                      child: const Icon(Icons.close, color: Colors.white54, size: 20),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Center(
-                  child: Text(
-                    widget.subtitle,
-                    style: const TextStyle(color: Colors.white54, fontSize: 12),
-                    textAlign: TextAlign.center,
-                  ),
-                ),
-                const SizedBox(height: 24),
-
-                _buildLabel('Nombre (Alias)'),
-                _buildTextField(
-                  'Ej: Servidor Principal', 
-                  controller: _nameController,
-                  validator: (val) => _validateRequired(val, 'El nombre/alias'),
-                ),
-                const SizedBox(height: 16),
-
-                _buildLabel('Dirección IP / Dominio'),
-                _buildTextField(
-                  'Ej: 192.168.1.100', 
-                  controller: _ipController,
-                  validator: _validateIpOrDomain,
-                ),
-                const SizedBox(height: 16),
-
-                _buildLabel('Usuario'),
-                _buildTextField(
-                  'Ej: root, admin', 
-                  controller: _userController,
-                  validator: (val) => _validateRequired(val, 'El usuario'),
-                ),
-                const SizedBox(height: 16),
-
-                _buildLabel('Método de autenticación'),
-                const SizedBox(height: 8),
-                Container(
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF1E2230),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: GestureDetector(
-                          onTap: () => setState(() => isPasswordSelected = true),
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: isPasswordSelected ? const Color(0xFF7B52FF) : Colors.transparent,
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(Icons.lock_outline, color: isPasswordSelected ? Colors.white : Colors.white54, size: 16),
-                                const SizedBox(width: 8),
-                                Text('Contraseña', style: TextStyle(color: isPasswordSelected ? Colors.white : Colors.white54, fontWeight: FontWeight.bold)),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                      Expanded(
-                        child: GestureDetector(
-                          onTap: () => setState(() => isPasswordSelected = false),
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: !isPasswordSelected ? const Color(0xFF7B52FF) : Colors.transparent,
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(Icons.key, color: !isPasswordSelected ? Colors.white : Colors.white54, size: 16),
-                                const SizedBox(width: 8),
-                                Text('SSH Key', style: TextStyle(color: !isPasswordSelected ? Colors.white : Colors.white54, fontWeight: FontWeight.bold)),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-
-                _buildLabel(isPasswordSelected ? 'Contraseña' : 'Clave SSH / Ruta del archivo'),
-                _buildTextField(
-                  isPasswordSelected ? 'Ingresa la contraseña' : 'Pega tu clave o selecciona archivo',
-                  controller: _passController,
-                  isPassword: isPasswordSelected,
-                  validator: (val) => _validateRequired(val, isPasswordSelected ? 'La contraseña' : 'La clave SSH'),
-                ),
-                const SizedBox(height: 24),
-
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextButton(
-                        style: TextButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            side: const BorderSide(color: Colors.white24),
-                          ),
-                        ),
-                        onPressed: () => Navigator.pop(context),
-                        child: const Text('Cancelar', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Container(
-                        decoration: BoxDecoration(
-                          gradient: const LinearGradient(colors: [Color(0xFF9B63FF), Color(0xFF704EFE)]),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: TextButton(
-                          style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14)),
-                          onPressed: () {
-                            if (_formKey.currentState!.validate()) {
-                              widget.onSubmit(
-                                _ipController.text.trim(),
-                                _userController.text.trim(),
-                                _passController.text,
-                                22, 
-                              );
-                            }
-                          },
-                          child: Text(widget.buttonText, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
+    return AlertDialog(
+      backgroundColor: const Color(0xFF161A26),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      title: _buildTitle(),
+      content: SingleChildScrollView(
+        child: Form(
+          key: _formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildField("Host / IP", _ipController, hint: "192.168.1.1"),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(flex: 3, child: _buildField("Usuario", _userController, hint: "root")),
+                  const SizedBox(width: 12),
+                  Expanded(flex: 2, child: _buildField("Puerto", _portController, hint: "22", isNumber: true)),
+                ],
+              ),
+              const SizedBox(height: 20),
+              _buildAuthSelector(),
+              const SizedBox(height: 16),
+              if (usePassword)
+                _buildField("Contraseña", _passController, hint: "••••••••", isPassword: true)
+              else
+                widget.initialKeyId != null
+                    ? _buildAlreadyHasKeyInfo()
+                    : _buildKeySection(),
+            ],
           ),
         ),
       ),
+      actions: _buildActions(),
     );
   }
 
-  Widget _buildLabel(String text) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Text(text, style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600)),
+  // SECCIÓN DE LLAVES CON BOTONES DE CARGA
+  Widget _buildKeySection() {
+    return Column(
+      children: [
+        _buildKeyFieldWithPicker(
+            "Llave Privada (ID_RSA / PEM)",
+            _privKeyController,
+            "-----BEGIN RSA PRIVATE KEY-----"
+        ),
+        const SizedBox(height: 16),
+        _buildKeyFieldWithPicker(
+            "Llave Pública (ID_RSA.PUB)",
+            _pubKeyController,
+            "ssh-rsa AAAA..."
+        ),
+      ],
     );
   }
 
-  Widget _buildTextField(String hint, {required TextEditingController controller, bool isPassword = false, String? Function(String?)? validator}) {
-    return TextFormField(
-      controller: controller,
-      obscureText: isPassword && !isPasswordVisible,
-      style: const TextStyle(color: Colors.white),
-      validator: validator,
-      autovalidateMode: AutovalidateMode.onUserInteraction,
-      decoration: InputDecoration(
-        hintText: hint,
-        hintStyle: const TextStyle(color: Colors.white38),
-        filled: true,
-        fillColor: const Color(0xFF1E2230),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        errorStyle: const TextStyle(color: Colors.redAccent, fontSize: 12),
-        errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
-          borderSide: const BorderSide(color: Colors.redAccent, width: 1.5),
+  Widget _buildKeyFieldWithPicker(String label, TextEditingController controller, String hint) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(label, style: const TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w500)),
+            TextButton.icon(
+              onPressed: () => _pickKeyFile(controller),
+              icon: const Icon(Icons.file_open, size: 14, color: Color(0xFF7B52FF)),
+              label: const Text("Cargar archivo", style: TextStyle(fontSize: 11, color: Color(0xFF7B52FF))),
+              style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: const Size(0, 0)),
+            ),
+          ],
         ),
-        focusedErrorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
-          borderSide: const BorderSide(color: Colors.redAccent, width: 2),
+        const SizedBox(height: 6),
+        TextFormField(
+          controller: controller,
+          maxLines: 3,
+          style: const TextStyle(color: Colors.white, fontSize: 12, fontFamily: 'monospace'),
+          decoration: InputDecoration(
+            hintText: hint,
+            hintStyle: const TextStyle(color: Colors.white24, fontSize: 11),
+            filled: true,
+            fillColor: const Color(0xFF1E2230),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+          ),
         ),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
-          borderSide: const BorderSide(color: Colors.white10),
+      ],
+    );
+  }
+
+  // ... (Los demás métodos como _buildField, _authOption, etc. se mantienen igual) ...
+
+  void _handleInternalSubmit() {
+    if (_formKey.currentState!.validate()) {
+      widget.onSubmit(
+        _ipController.text.trim(),
+        _userController.text.trim(),
+        usePassword ? _passController.text : null,
+        int.parse(_portController.text.trim()),
+        !usePassword ? _privKeyController.text.trim() : null,
+        !usePassword ? _pubKeyController.text.trim() : null, // Enviamos la pública también
+      );
+    }
+  }
+
+  // --- MÉTODOS DE APOYO UI ---
+  Widget _buildTitle() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(widget.title, style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 4),
+        Text(widget.subtitle, style: const TextStyle(color: Colors.white60, fontSize: 13)),
+      ],
+    );
+  }
+
+  Widget _buildAuthSelector() {
+    return Row(
+      children: [
+        _authOption("Contraseña", usePassword, () => setState(() => usePassword = true)),
+        const SizedBox(width: 8),
+        _authOption("Llave SSH", !usePassword, () => setState(() => usePassword = false)),
+      ],
+    );
+  }
+
+  Widget _authOption(String label, bool selected, VoidCallback onTap) {
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          decoration: BoxDecoration(
+            color: selected ? const Color(0xFF7B52FF).withOpacity(0.2) : Colors.transparent,
+            border: Border.all(color: selected ? const Color(0xFF7B52FF) : Colors.white10),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Text(label, textAlign: TextAlign.center, style: TextStyle(color: selected ? Colors.white : Colors.white38, fontSize: 12)),
         ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
-          borderSide: const BorderSide(color: Colors.white10),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
-          borderSide: const BorderSide(color: Color(0xFF7B52FF)),
-        ),
-        suffixIcon: isPassword
-            ? IconButton(
-                icon: Icon(isPasswordVisible ? Icons.visibility : Icons.visibility_off, color: Colors.white38, size: 20),
-                onPressed: () => setState(() => isPasswordVisible = !isPasswordVisible),
-              )
-            : null,
       ),
+    );
+  }
+
+  Widget _buildAlreadyHasKeyInfo() {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(color: Colors.green.withOpacity(0.1), borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.green.withOpacity(0.3))),
+      child: const Row(
+        children: [
+          Icon(Icons.check_circle, color: Colors.green, size: 20),
+          SizedBox(width: 8),
+          Expanded(child: Text("Usando llave guardada en este dispositivo", style: TextStyle(color: Colors.green, fontSize: 12))),
+        ],
+      ),
+    );
+  }
+
+  List<Widget> _buildActions() {
+    return [
+      TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancelar", style: TextStyle(color: Colors.white54))),
+      ElevatedButton(
+        style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF7B52FF), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
+        onPressed: _handleInternalSubmit,
+        child: Text(widget.buttonText, style: const TextStyle(color: Colors.white)),
+      ),
+    ];
+  }
+
+  Widget _buildField(String label, TextEditingController controller, {String? hint, bool isPassword = false, bool isNumber = false}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: const TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w500)),
+        const SizedBox(height: 6),
+        TextFormField(
+          controller: controller,
+          obscureText: isPassword && !isPasswordVisible,
+          keyboardType: isNumber ? TextInputType.number : TextInputType.text,
+          style: const TextStyle(color: Colors.white, fontSize: 14),
+          decoration: InputDecoration(
+            hintText: hint,
+            hintStyle: const TextStyle(color: Colors.white24, fontSize: 13),
+            filled: true,
+            fillColor: const Color(0xFF1E2230),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+            suffixIcon: isPassword ? IconButton(
+              icon: Icon(isPasswordVisible ? Icons.visibility : Icons.visibility_off, color: Colors.white38, size: 18),
+              onPressed: () => setState(() => isPasswordVisible = !isPasswordVisible),
+            ) : null,
+          ),
+          validator: (v) => v == null || v.isEmpty ? "Campo obligatorio" : null,
+        ),
+      ],
     );
   }
 }

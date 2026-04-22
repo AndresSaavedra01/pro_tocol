@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart'; // NUEVO: Importamos go_router
 
-import 'package:pro_tocol/controller/ProfileController.dart';
-import 'package:pro_tocol/controller/ServerController.dart';
 import 'package:pro_tocol/model/entities/DataBaseEntities.dart';
 
 import 'package:pro_tocol/view/components/connection_dialog.dart';
 import 'package:pro_tocol/view/components/custom_sidebar.dart';
 
+import '../../controller/ServerConnectionController.dart';
 import '../../controller/TempSessionController.dart';
+import '../../injection.dart';
 import '../../model/entities/TempSessionConfig.dart';
 import '../theme/AppColors.dart';
 import 'ServerPage.dart';
@@ -19,23 +19,22 @@ enum ViewType { home, serverView, tempSessionView, loading, distroLogs }
 
 class WorkspacePage extends StatefulWidget {
   final Profile profile;
-  final ProfileController profileController;
-  final ServerController serverController;
-  final TempSessionController tempSessionController;
 
   const WorkspacePage({
     super.key,
     required this.profile,
-    required this.profileController,
-    required this.serverController,
-    required this.tempSessionController,
   });
+
+  ServerConnectionController get _connectionController => getIt<ServerConnectionController>();
+  TempSessionController get _tempSessionController => getIt<TempSessionController>();
 
   @override
   State<WorkspacePage> createState() => _WorkspacePageState();
 }
 
 class _WorkspacePageState extends State<WorkspacePage> {
+
+
   ViewType _currentView = ViewType.home;
   ServerConfig? _selectedServer;
   TempSessionConfig? _selectedTempSession;
@@ -68,7 +67,7 @@ class _WorkspacePageState extends State<WorkspacePage> {
     });
 
     try {
-      await widget.serverController.connectToServer(server);
+      await widget._connectionController.connectToServer(server);
       if (mounted) setState(() => _currentView = ViewType.serverView);
     } catch (e) {
       if (mounted) {
@@ -90,12 +89,12 @@ class _WorkspacePageState extends State<WorkspacePage> {
     });
 
     try {
-      await widget.tempSessionController.createAndConnect(
+      await widget._tempSessionController.createAndConnect(
         host: config.host,
         username: config.username,
         port: config.port,
         password: config.password,
-        privateKey: config.privateKey,
+        keyPairId: config.keyPairId,
       );
 
       if (mounted) setState(() => _currentView = ViewType.tempSessionView);
@@ -133,7 +132,7 @@ class _WorkspacePageState extends State<WorkspacePage> {
         onEditServer: (s) => _showEditServerDialog(context, s),
         onDeleteServer: (s) {
           _confirmDelete(context, s.host, () async {
-            await widget.serverController.deleteServer(s.id);
+            await widget._connectionController.deleteServer(s.id);
             if (_selectedServer?.id == s.id) _goHome();
             _refreshServers();
           });
@@ -152,7 +151,7 @@ class _WorkspacePageState extends State<WorkspacePage> {
 
         onDeleteTempSession: (s) {
           _confirmDelete(context, s.host, () async {
-            await widget.tempSessionController.disconnectAndRemove(s.host);
+            await widget._tempSessionController.disconnectAndRemove(s.host);
             setState(() {
               _tempConfigs.removeWhere((c) => c.host == s.host);
               if (_selectedTempSession?.host == s.host) _goHome();
@@ -216,19 +215,16 @@ class _WorkspacePageState extends State<WorkspacePage> {
         return ServerPage(
           key: ValueKey('server_${_selectedServer!.id}'),
           serverConfig: _selectedServer!,
-          serverController: widget.serverController,
         );
       case ViewType.tempSessionView:
         return TempSessionPage(
           key: ValueKey('temp_${_selectedTempSession!.host}'),
           tempConfig: _selectedTempSession!,
-          tempController: widget.tempSessionController,
         );
       case ViewType.distroLogs:
         return DistroLogsPage(
-          commandHistoryManager: widget.serverController.commandHistoryManager,
-          activeServer: _selectedServer != null ? widget.serverController.getActiveServer(_selectedServer!.id) : null,
-          activeSession: _selectedTempSession != null ? widget.tempSessionController.getValidSession(_selectedTempSession!.host) : null,
+          activeServer: _selectedServer != null ? widget._connectionController.getActiveServer(_selectedServer!.id) : null,
+          activeSession: _selectedTempSession != null ? widget._tempSessionController.getValidSession(_selectedTempSession!.host) : null,
         );
       case ViewType.home:
       default:
@@ -304,7 +300,6 @@ class _WorkspacePageState extends State<WorkspacePage> {
       ),
     );
   }
-
   void _showServerDialog(BuildContext context) {
     showDialog(
       context: context,
@@ -312,24 +307,35 @@ class _WorkspacePageState extends State<WorkspacePage> {
         title: 'Crear Servidor',
         subtitle: 'Se guardará en Isar y se conectará ahora',
         buttonText: 'Guardar y Conectar',
-        onSubmit: (host, user, pass, port) async {
+        // ACTUALIZACIÓN: Ahora recibimos 6 parámetros (añadido pubKey)
+        onSubmit: (host, user, pass, port, privKey, pubKey) async {
           try {
-            final newServer = await widget.serverController.createAndLinkServer(
+            String? finalKeyId;
+
+            // Si el usuario proporcionó una llave privada (ya sea pegada o por archivo)
+            if (privKey != null && privKey.isNotEmpty) {
+              // Guardamos la llave privada.
+              // Nota: Si quieres guardar la pública explícitamente, podrías modificar saveManualKey
+              // para aceptar ambas, pero con la privada ya podemos derivar la pública.
+              finalKeyId = await widget._connectionController.sshKeyController.saveManualKey(privKey);
+            }
+
+            final newServer = await widget._connectionController.createAndLinkServer(
               profileId: widget.profile.id,
               host: host,
               username: user,
               port: port,
               password: pass,
+              keyPairId: finalKeyId,
             );
 
             if (context.mounted) {
-              dialogContext.pop(); // REFACTORIZADO
+              dialogContext.pop();
               await _refreshServers();
               _selectServer(newServer);
             }
           } catch (e) {
             if (context.mounted) {
-              // REFACTORIZADO
               context.push('/error', extra: {
                 'message': e.toString(),
                 'onRetry': () => context.pop(),
@@ -351,14 +357,26 @@ class _WorkspacePageState extends State<WorkspacePage> {
         initialHost: server.host,
         initialUser: server.username,
         initialPass: server.password,
-        onSubmit: (host, user, pass, port) async {
+        // PASAMOS LOS VALORES INICIALES QUE AHORA SOPORTA EL DIALOG
+        initialPort: server.port,
+        initialKeyId: server.keyPairId,
+
+        onSubmit: (host, user, pass, port, privKey, pubKey) async {
           server.host = host;
           server.username = user;
           server.password = pass;
           server.port = port;
-          await widget.serverController.updateServer(server);
+
+          // Si se ingresó una llave nueva (privada)
+          if (privKey != null && privKey.isNotEmpty) {
+            final newKeyId = await widget._connectionController.sshKeyController.saveManualKey(privKey);
+            server.keyPairId = newKeyId;
+          }
+
+          await widget._connectionController.updateServer(server);
+
           if (context.mounted) {
-            dialogContext.pop(); // REFACTORIZADO
+            dialogContext.pop();
             _refreshServers();
           }
         },
@@ -373,15 +391,18 @@ class _WorkspacePageState extends State<WorkspacePage> {
         title: 'Nueva Sesión Temporal',
         subtitle: 'Los datos no se guardarán al cerrar la app',
         buttonText: 'Conectar Ahora',
-        onSubmit: (host, user, pass, port) async {
+        // ACTUALIZACIÓN FIRMA
+        onSubmit: (host, user, pass, port, privKey, pubKey) async {
           final config = TempSessionConfig(
             host: host,
             username: user,
             password: pass,
             port: port,
+            // Si tu TempSessionConfig soporta llaves, pásalas aquí:
+            // privateKey: privKey,
           );
           setState(() => _tempConfigs.add(config));
-          dialogContext.pop(); // REFACTORIZADO
+          dialogContext.pop();
           _selectTempSession(config);
         },
       ),
@@ -398,8 +419,10 @@ class _WorkspacePageState extends State<WorkspacePage> {
         initialHost: config.host,
         initialUser: config.username,
         initialPass: config.password,
-        onSubmit: (host, user, pass, port) async {
-          await widget.tempSessionController.disconnectAndRemove(config.host);
+        initialPort: config.port,
+
+        onSubmit: (host, user, pass, port, privKey, pubKey) async {
+          await widget._tempSessionController.disconnectAndRemove(config.host);
 
           setState(() {
             config.host = host;
@@ -409,7 +432,7 @@ class _WorkspacePageState extends State<WorkspacePage> {
           });
 
           if (context.mounted) {
-            dialogContext.pop(); // REFACTORIZADO
+            dialogContext.pop();
             _selectTempSession(config);
           }
         },

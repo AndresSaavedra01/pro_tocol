@@ -1,26 +1,18 @@
-
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-import 'package:pro_tocol/controller/ProfileController.dart';
-import 'package:pro_tocol/controller/ServerController.dart';
-import 'package:pro_tocol/controller/TempSessionController.dart';
+// --- Entidades ---
 import 'package:pro_tocol/model/entities/DataBaseEntities.dart';
 
+// --- Páginas ---
 import 'package:pro_tocol/view/pages/ProfilePage.dart';
 import 'package:pro_tocol/view/pages/WorkspacePage.dart';
 import 'package:pro_tocol/view/components/SshErrorDisplay.dart';
 
 class AppRouter {
-  final ProfileController profileController;
-  final ServerController serverController;
-  final TempSessionController tempSessionController;
+  // ELIMINADO: Ya no almacenamos los controladores aquí para pasarlos manualmente.
 
-  AppRouter({
-    required this.profileController,
-    required this.serverController,
-    required this.tempSessionController,
-  });
+  AppRouter();
 
   late final GoRouter router = GoRouter(
     initialLocation: '/',
@@ -28,11 +20,7 @@ class AppRouter {
       // --- Ruta Principal: Perfiles ---
       GoRoute(
         path: '/',
-        builder: (context, state) => ProfilePage(
-          profileController: profileController,
-          serverController: serverController,
-          tempSessionController: tempSessionController,
-        ),
+        builder: (context, state) => const ProfilePage(), // Limpio de constructores
       ),
 
       // --- Ruta: Workspace ---
@@ -46,9 +34,7 @@ class AppRouter {
             key: state.pageKey,
             child: WorkspacePage(
               profile: profile,
-              profileController: profileController,
-              serverController: serverController,
-              tempSessionController: tempSessionController,
+              // ELIMINADO: Los controladores se inyectan dentro de WorkspacePage o sus Tabs
             ),
             transitionDuration: const Duration(milliseconds: 400),
             transitionsBuilder: (context, animation, secondaryAnimation, child) {
@@ -56,7 +42,7 @@ class AppRouter {
                 opacity: animation,
                 child: SlideTransition(
                   position: Tween<Offset>(
-                    begin: const Offset(0.0, 0.1), // Sube un 10% de la pantalla
+                    begin: const Offset(0.0, 0.1),
                     end: Offset.zero,
                   ).animate(CurvedAnimation(parent: animation, curve: Curves.easeOut)),
                   child: child,
@@ -71,7 +57,6 @@ class AppRouter {
       GoRoute(
         path: '/error',
         builder: (context, state) {
-          // Extraemos los argumentos para la pantalla de error
           final args = state.extra as Map<String, dynamic>;
           return SshErrorDisplay(
             errorMessage: args['message'] as String,

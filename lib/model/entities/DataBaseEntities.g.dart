@@ -509,20 +509,20 @@ const ServerConfigSchema = CollectionSchema(
       name: r'host',
       type: IsarType.string,
     ),
-    r'password': PropertySchema(
+    r'keyPairId': PropertySchema(
       id: 1,
+      name: r'keyPairId',
+      type: IsarType.string,
+    ),
+    r'password': PropertySchema(
+      id: 2,
       name: r'password',
       type: IsarType.string,
     ),
     r'port': PropertySchema(
-      id: 2,
+      id: 3,
       name: r'port',
       type: IsarType.long,
-    ),
-    r'privateKey': PropertySchema(
-      id: 3,
-      name: r'privateKey',
-      type: IsarType.string,
     ),
     r'username': PropertySchema(
       id: 4,
@@ -560,13 +560,13 @@ int _serverConfigEstimateSize(
   var bytesCount = offsets.last;
   bytesCount += 3 + object.host.length * 3;
   {
-    final value = object.password;
+    final value = object.keyPairId;
     if (value != null) {
       bytesCount += 3 + value.length * 3;
     }
   }
   {
-    final value = object.privateKey;
+    final value = object.password;
     if (value != null) {
       bytesCount += 3 + value.length * 3;
     }
@@ -582,9 +582,9 @@ void _serverConfigSerialize(
   Map<Type, List<int>> allOffsets,
 ) {
   writer.writeString(offsets[0], object.host);
-  writer.writeString(offsets[1], object.password);
-  writer.writeLong(offsets[2], object.port);
-  writer.writeString(offsets[3], object.privateKey);
+  writer.writeString(offsets[1], object.keyPairId);
+  writer.writeString(offsets[2], object.password);
+  writer.writeLong(offsets[3], object.port);
   writer.writeString(offsets[4], object.username);
 }
 
@@ -597,9 +597,9 @@ ServerConfig _serverConfigDeserialize(
   final object = ServerConfig();
   object.host = reader.readString(offsets[0]);
   object.id = id;
-  object.password = reader.readStringOrNull(offsets[1]);
-  object.port = reader.readLong(offsets[2]);
-  object.privateKey = reader.readStringOrNull(offsets[3]);
+  object.keyPairId = reader.readStringOrNull(offsets[1]);
+  object.password = reader.readStringOrNull(offsets[2]);
+  object.port = reader.readLong(offsets[3]);
   object.username = reader.readString(offsets[4]);
   return object;
 }
@@ -616,9 +616,9 @@ P _serverConfigDeserializeProp<P>(
     case 1:
       return (reader.readStringOrNull(offset)) as P;
     case 2:
-      return (reader.readLong(offset)) as P;
-    case 3:
       return (reader.readStringOrNull(offset)) as P;
+    case 3:
+      return (reader.readLong(offset)) as P;
     case 4:
       return (reader.readString(offset)) as P;
     default:
@@ -909,6 +909,160 @@ extension ServerConfigQueryFilter
   }
 
   QueryBuilder<ServerConfig, ServerConfig, QAfterFilterCondition>
+      keyPairIdIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNull(
+        property: r'keyPairId',
+      ));
+    });
+  }
+
+  QueryBuilder<ServerConfig, ServerConfig, QAfterFilterCondition>
+      keyPairIdIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNotNull(
+        property: r'keyPairId',
+      ));
+    });
+  }
+
+  QueryBuilder<ServerConfig, ServerConfig, QAfterFilterCondition>
+      keyPairIdEqualTo(
+    String? value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'keyPairId',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ServerConfig, ServerConfig, QAfterFilterCondition>
+      keyPairIdGreaterThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'keyPairId',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ServerConfig, ServerConfig, QAfterFilterCondition>
+      keyPairIdLessThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'keyPairId',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ServerConfig, ServerConfig, QAfterFilterCondition>
+      keyPairIdBetween(
+    String? lower,
+    String? upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'keyPairId',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ServerConfig, ServerConfig, QAfterFilterCondition>
+      keyPairIdStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'keyPairId',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ServerConfig, ServerConfig, QAfterFilterCondition>
+      keyPairIdEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'keyPairId',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ServerConfig, ServerConfig, QAfterFilterCondition>
+      keyPairIdContains(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'keyPairId',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ServerConfig, ServerConfig, QAfterFilterCondition>
+      keyPairIdMatches(String pattern, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'keyPairId',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ServerConfig, ServerConfig, QAfterFilterCondition>
+      keyPairIdIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'keyPairId',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<ServerConfig, ServerConfig, QAfterFilterCondition>
+      keyPairIdIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'keyPairId',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<ServerConfig, ServerConfig, QAfterFilterCondition>
       passwordIsNull() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(const FilterCondition.isNull(
@@ -1117,160 +1271,6 @@ extension ServerConfigQueryFilter
   }
 
   QueryBuilder<ServerConfig, ServerConfig, QAfterFilterCondition>
-      privateKeyIsNull() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(const FilterCondition.isNull(
-        property: r'privateKey',
-      ));
-    });
-  }
-
-  QueryBuilder<ServerConfig, ServerConfig, QAfterFilterCondition>
-      privateKeyIsNotNull() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(const FilterCondition.isNotNull(
-        property: r'privateKey',
-      ));
-    });
-  }
-
-  QueryBuilder<ServerConfig, ServerConfig, QAfterFilterCondition>
-      privateKeyEqualTo(
-    String? value, {
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'privateKey',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<ServerConfig, ServerConfig, QAfterFilterCondition>
-      privateKeyGreaterThan(
-    String? value, {
-    bool include = false,
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.greaterThan(
-        include: include,
-        property: r'privateKey',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<ServerConfig, ServerConfig, QAfterFilterCondition>
-      privateKeyLessThan(
-    String? value, {
-    bool include = false,
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.lessThan(
-        include: include,
-        property: r'privateKey',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<ServerConfig, ServerConfig, QAfterFilterCondition>
-      privateKeyBetween(
-    String? lower,
-    String? upper, {
-    bool includeLower = true,
-    bool includeUpper = true,
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.between(
-        property: r'privateKey',
-        lower: lower,
-        includeLower: includeLower,
-        upper: upper,
-        includeUpper: includeUpper,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<ServerConfig, ServerConfig, QAfterFilterCondition>
-      privateKeyStartsWith(
-    String value, {
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.startsWith(
-        property: r'privateKey',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<ServerConfig, ServerConfig, QAfterFilterCondition>
-      privateKeyEndsWith(
-    String value, {
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.endsWith(
-        property: r'privateKey',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<ServerConfig, ServerConfig, QAfterFilterCondition>
-      privateKeyContains(String value, {bool caseSensitive = true}) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.contains(
-        property: r'privateKey',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<ServerConfig, ServerConfig, QAfterFilterCondition>
-      privateKeyMatches(String pattern, {bool caseSensitive = true}) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.matches(
-        property: r'privateKey',
-        wildcard: pattern,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<ServerConfig, ServerConfig, QAfterFilterCondition>
-      privateKeyIsEmpty() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'privateKey',
-        value: '',
-      ));
-    });
-  }
-
-  QueryBuilder<ServerConfig, ServerConfig, QAfterFilterCondition>
-      privateKeyIsNotEmpty() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.greaterThan(
-        property: r'privateKey',
-        value: '',
-      ));
-    });
-  }
-
-  QueryBuilder<ServerConfig, ServerConfig, QAfterFilterCondition>
       usernameEqualTo(
     String value, {
     bool caseSensitive = true,
@@ -1441,6 +1441,18 @@ extension ServerConfigQuerySortBy
     });
   }
 
+  QueryBuilder<ServerConfig, ServerConfig, QAfterSortBy> sortByKeyPairId() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'keyPairId', Sort.asc);
+    });
+  }
+
+  QueryBuilder<ServerConfig, ServerConfig, QAfterSortBy> sortByKeyPairIdDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'keyPairId', Sort.desc);
+    });
+  }
+
   QueryBuilder<ServerConfig, ServerConfig, QAfterSortBy> sortByPassword() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'password', Sort.asc);
@@ -1462,19 +1474,6 @@ extension ServerConfigQuerySortBy
   QueryBuilder<ServerConfig, ServerConfig, QAfterSortBy> sortByPortDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'port', Sort.desc);
-    });
-  }
-
-  QueryBuilder<ServerConfig, ServerConfig, QAfterSortBy> sortByPrivateKey() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'privateKey', Sort.asc);
-    });
-  }
-
-  QueryBuilder<ServerConfig, ServerConfig, QAfterSortBy>
-      sortByPrivateKeyDesc() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'privateKey', Sort.desc);
     });
   }
 
@@ -1517,6 +1516,18 @@ extension ServerConfigQuerySortThenBy
     });
   }
 
+  QueryBuilder<ServerConfig, ServerConfig, QAfterSortBy> thenByKeyPairId() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'keyPairId', Sort.asc);
+    });
+  }
+
+  QueryBuilder<ServerConfig, ServerConfig, QAfterSortBy> thenByKeyPairIdDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'keyPairId', Sort.desc);
+    });
+  }
+
   QueryBuilder<ServerConfig, ServerConfig, QAfterSortBy> thenByPassword() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'password', Sort.asc);
@@ -1538,19 +1549,6 @@ extension ServerConfigQuerySortThenBy
   QueryBuilder<ServerConfig, ServerConfig, QAfterSortBy> thenByPortDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'port', Sort.desc);
-    });
-  }
-
-  QueryBuilder<ServerConfig, ServerConfig, QAfterSortBy> thenByPrivateKey() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'privateKey', Sort.asc);
-    });
-  }
-
-  QueryBuilder<ServerConfig, ServerConfig, QAfterSortBy>
-      thenByPrivateKeyDesc() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'privateKey', Sort.desc);
     });
   }
 
@@ -1576,6 +1574,13 @@ extension ServerConfigQueryWhereDistinct
     });
   }
 
+  QueryBuilder<ServerConfig, ServerConfig, QDistinct> distinctByKeyPairId(
+      {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'keyPairId', caseSensitive: caseSensitive);
+    });
+  }
+
   QueryBuilder<ServerConfig, ServerConfig, QDistinct> distinctByPassword(
       {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
@@ -1586,13 +1591,6 @@ extension ServerConfigQueryWhereDistinct
   QueryBuilder<ServerConfig, ServerConfig, QDistinct> distinctByPort() {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'port');
-    });
-  }
-
-  QueryBuilder<ServerConfig, ServerConfig, QDistinct> distinctByPrivateKey(
-      {bool caseSensitive = true}) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addDistinctBy(r'privateKey', caseSensitive: caseSensitive);
     });
   }
 
@@ -1618,6 +1616,12 @@ extension ServerConfigQueryProperty
     });
   }
 
+  QueryBuilder<ServerConfig, String?, QQueryOperations> keyPairIdProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'keyPairId');
+    });
+  }
+
   QueryBuilder<ServerConfig, String?, QQueryOperations> passwordProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'password');
@@ -1627,12 +1631,6 @@ extension ServerConfigQueryProperty
   QueryBuilder<ServerConfig, int, QQueryOperations> portProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'port');
-    });
-  }
-
-  QueryBuilder<ServerConfig, String?, QQueryOperations> privateKeyProperty() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addPropertyName(r'privateKey');
     });
   }
 
