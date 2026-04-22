@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:pro_tocol/view/pages/server_tabs/AppsManagerTab.dart';
 import 'package:pro_tocol/view/pages/server_tabs/ArchivosTab.dart';
 import 'package:pro_tocol/view/pages/server_tabs/MonitorTab.dart';
+import 'package:pro_tocol/view/pages/server_tabs/SeguridadTab.dart';
 import 'package:pro_tocol/view/pages/server_tabs/TerminalTab.dart';
 import 'package:pro_tocol/view/pages/server_tabs/TemplatesTab.dart';
 import 'package:xterm/xterm.dart';
@@ -152,7 +153,8 @@ class _ServerPageState extends State<ServerPage> {
     final distroIcon = _getDistroIcon(distroName);
 
     return DefaultTabController(
-      length: widget.isTemporarySession ? 1 : 5,
+      // 1. CAMBIAR LENGTH de 5 a 6
+      length: widget.isTemporarySession ? 1 : 6,
       child: Scaffold(
         backgroundColor: AppColors.background,
         appBar: AppBar(
@@ -208,16 +210,18 @@ class _ServerPageState extends State<ServerPage> {
           bottom: widget.isTemporarySession
               ? null
               : const TabBar(
+            isScrollable: true, // RECOMENDADO: Poner true porque 6 tabs pueden apretarse en móviles pequeños
             indicatorColor: AppColors.primary,
             labelColor: AppColors.textPrimary,
             unselectedLabelColor: AppColors.textMuted,
             labelStyle: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
             tabs: [
-              Tab(text: 'Monitor'), // Nombres más cortos ayudan en pantallas pequeñas
+              Tab(text: 'Monitor'),
               Tab(text: 'Terminal'),
               Tab(text: 'Archivos'),
               Tab(text: 'Apps'),
               Tab(text: 'Templates'),
+              Tab(text: 'Seguridad'), // 2. NUEVO TAB
             ],
           ),
         ),
@@ -238,6 +242,11 @@ class _ServerPageState extends State<ServerPage> {
               serverConfig: widget.serverConfig,
               serverController: widget.serverController,
               activeServer: _activeServer,
+            ),
+            // 3. NUEVO WIDGET DEL TAB
+            SeguridadTab(
+              serverConfig: widget.serverConfig,
+              serverController: widget.serverController,
             ),
           ],
         ),

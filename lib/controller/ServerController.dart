@@ -20,7 +20,7 @@ class ServerController {
   final ServerRepository _serverRepository;
   final ProfileRepository _profileRepository;
   final CommandHistoryManager _commandHistoryManager;
-  final SshKeyController _sshKeyController; // <- NUEVO
+  final SshKeyController sshKeyController;
 
   // MAPA VITAL: Mantiene vivas las conexiones. La llave es el ID del ServerConfig.
   final Map<int, Server> _activeConnections = {};
@@ -31,7 +31,7 @@ class ServerController {
   final Set<int> _activeTemplateRuns = {};
   static const String _exitCodeMarker = '__PROTOCOL_EXIT_CODE:';
 
-  ServerController(this._serverRepository, this._profileRepository, this._commandHistoryManager, this._sshKeyController);
+  ServerController(this._serverRepository, this._profileRepository, this._commandHistoryManager, this.sshKeyController);
 
   /// 1. VALIDACIÓN Y CREACIÓN
   Future<ServerConfig> createAndLinkServer({
@@ -77,11 +77,17 @@ class ServerController {
     final server = _serverRepository.buildServerFromConfig(config);
 
     try {
-      // Usamos el servicio interno para conectar.
-      // Al implementar GeneralConfig, config pasa directo sin problemas.
-      //await server.sshService.connectWithKey(config);
+      String? privateKeyContent;
 
-      // Si fue exitoso, lo guardamos en las conexiones activas
+      // Si tiene un ID de llave, recuperamos el contenido PEM real
+      if (config.keyPairId != null && config.keyPairId!.isNotEmpty) {
+        privateKeyContent = await sshKeyController.getPrivateKey(config.keyPairId!);
+      }
+
+      // Conectamos pasando el contenido de la llave (si existe)
+      // Nota: Tu SSHService.connect debe estar actualizado para recibir este parámetro opcional
+      await server.sshService.connect(config, privateKeyPem: privateKeyContent);
+
       _activeConnections[serverId] = server;
 
       // Detectar información de distro y package manager en segundo plano.
@@ -94,6 +100,17 @@ class ServerController {
       _setSearchResults(serverId, AppsManagerCatalog.commonApps);
     } catch (e) {
       throw Exception('Fallo al conectar con ${config.host}: $e');
+    }
+  }
+
+  /// Obtiene la configuración actualizada de un servidor desde la base de datos.
+  /// Útil para refrescar la UI tras cambios en las llaves SSH.
+  Future<ServerConfig?> getServerConfig(int id) async {
+    try {
+      return await _serverRepository.getServerConfigById(id);
+    } catch (e) {
+      debugPrint('Error al obtener la configuración del servidor $id: $e');
+      return null;
     }
   }
 
@@ -155,6 +172,35 @@ class ServerController {
     }
 
     return values;
+  }
+
+  /// Genera llaves SSH, las instala en el servidor remoto y actualiza la base de datos local.
+  Future<void> upgradeServerToKeyAuth(int serverId) async {
+    // 1. Obtener la configuración actual desde el repositorio
+    final config = await _serverRepository.getServerConfigById(serverId);
+    if (config == null) throw Exception("No se encontró la configuración del servidor.");
+
+    try {
+      // 2. Usar el controlador de llaves para generar e instalar
+      // Este método devuelve el ID único (keyId) con el que se guardó en SecureStorage
+      final newKeyId = await sshKeyController.generateAndInstallKey(config);
+
+      // 3. Actualizar el objeto de configuración
+      config.keyPairId = newKeyId;
+
+      // Opcional: Limpiar la contraseña para que no quede en texto plano en Isar
+      // config.password = "";
+
+      // 4. Persistir los cambios en Isar
+      await updateServer(config);
+
+      // 5. Opcional: Si el servidor está conectado, desconectarlo para forzar
+      // que la próxima conexión use la llave.
+      await disconnectFromServer(serverId);
+
+    } catch (e) {
+      throw Exception("Error al subir de nivel la seguridad: $e");
+    }
   }
 
   String _resolvePackageManager(String? id, String? idLike) {

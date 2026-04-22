@@ -55,9 +55,33 @@ class SshKeyController {
     return await _secureStorage.read(key: keyId);
   }
 
+  /// Obtiene la llave pública en formato OpenSSH a partir del ID de la privada
+  Future<String?> getPublicKey(String keyId) async {
+    final privateKeyPem = await _secureStorage.read(key: keyId);
+    if (privateKeyPem == null) return null;
+
+    try {
+      final privateKey = CryptoUtils.rsaPrivateKeyFromPem(privateKeyPem);
+      final publicKey = RSAPublicKey( privateKey.modulus!, privateKey.publicExponent!);
+      return _encodeToOpenSshPublicKey(publicKey);
+    } catch (e) {
+      print("Error reconstruyendo pública: $e");
+      return null;
+    }
+  }
   /// Elimina la llave (útil cuando se borra un servidor)
   Future<void> deleteKey(String keyId) async {
     await _secureStorage.delete(key: keyId);
+  }
+
+  /// Guarda una llave privada proporcionada manualmente por el usuario
+  Future<String> saveManualKey(String privateKeyPem) async {
+    if (privateKeyPem.isEmpty) throw Exception("La llave no puede estar vacía");
+
+    // Generamos un ID único para esta llave manual
+    final keyId = 'manual_key_${DateTime.now().millisecondsSinceEpoch}';
+    await _secureStorage.write(key: keyId, value: privateKeyPem);
+    return keyId;
   }
 
   // --- Helper Privado de Formateo (El que construimos antes) ---
