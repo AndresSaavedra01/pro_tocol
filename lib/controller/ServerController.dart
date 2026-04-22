@@ -14,10 +14,13 @@ import 'package:pro_tocol/logic/template_model.dart';
 import 'package:pro_tocol/logic/template_run_result.dart';
 import 'package:pro_tocol/logic/template_step.dart';
 
+import 'SshKeyController.dart';
+
 class ServerController {
   final ServerRepository _serverRepository;
   final ProfileRepository _profileRepository;
   final CommandHistoryManager _commandHistoryManager;
+  final SshKeyController _sshKeyController; // <- NUEVO
 
   // MAPA VITAL: Mantiene vivas las conexiones. La llave es el ID del ServerConfig.
   final Map<int, Server> _activeConnections = {};
@@ -28,7 +31,7 @@ class ServerController {
   final Set<int> _activeTemplateRuns = {};
   static const String _exitCodeMarker = '__PROTOCOL_EXIT_CODE:';
 
-  ServerController(this._serverRepository, this._profileRepository, this._commandHistoryManager);
+  ServerController(this._serverRepository, this._profileRepository, this._commandHistoryManager, this._sshKeyController);
 
   /// 1. VALIDACIÓN Y CREACIÓN
   Future<ServerConfig> createAndLinkServer({

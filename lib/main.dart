@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:isar/isar.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:pro_tocol/controller/SshKeyController.dart';
 
 // --- Entidades ---
 import 'package:pro_tocol/model/entities/DataBaseEntities.dart';
@@ -54,6 +55,7 @@ void main() async {
     serverRepository, 
     profileRepository, 
     commandHistoryManager,
+    SshKeyController()
   );
   
   final tempSessionController = TempSessionController(

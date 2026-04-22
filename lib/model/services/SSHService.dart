@@ -10,31 +10,38 @@ import '../entities/ServerMetrics.dart';
 class SSHService {
   SSHClient? _client;
   SFTPService? _sftpService;
-
   GeneralConfig? config;
 
   bool get isConnected => _client != null;
-
   SFTPService? get sftp => _sftpService;
 
-// ------------------------------------------------------------------
-  // 1. CONEXIÓN MEDIANTE CONTRASEÑA
-  // ------------------------------------------------------------------
-  Future<bool> connectWithPassword(GeneralConfig details) async {
+  // MÉTODO UNIFICADO: Ahora acepta opcionalmente el contenido de la llave privada
+  Future<bool> connect(GeneralConfig details, {String? privateKeyPem}) async {
     try {
       config = details;
-
       final socket = await SSHSocket.connect(
         details.host,
         details.port,
         timeout: const Duration(seconds: 10),
       );
 
+      List<SSHKeyPair> identities = [];
+      String? Function()? passwordHandler;
+
+      // Si recibimos el CONTENIDO de la llave (PEM), lo usamos
+      if (privateKeyPem != null && privateKeyPem.isNotEmpty) {
+        identities = SSHKeyPair.fromPem(privateKeyPem);
+      }
+      // Si no, usamos la contraseña
+      else if (details.password != null && details.password!.isNotEmpty) {
+        passwordHandler = () => details.password;
+      }
+
       _client = SSHClient(
         socket,
         username: details.username,
-        // Solo usamos la contraseña
-        onPasswordRequest: () => details.password,
+        onPasswordRequest: passwordHandler,
+        identities: identities,
       );
 
       _sftpService = SFTPService(_client!);
@@ -45,37 +52,9 @@ class SSHService {
     }
   }
 
-  // ------------------------------------------------------------------
-  // 2. CONEXIÓN MEDIANTE LLAVE PRIVADA (RSA / Ed25519)
-  // ------------------------------------------------------------------
-  /// Recibe los detalles del servidor y el contenido PEM de la llave privada
-  Future<bool> connectWithKey(GeneralConfig details, String privateKeyPem) async {
-    try {
-      config = details;
-
-      final socket = await SSHSocket.connect(
-        details.host,
-        details.port,
-        timeout: const Duration(seconds: 10),
-      );
-
-      // Parseamos el texto (PEM) de la llave privada
-      final identities = SSHKeyPair.fromPem(privateKeyPem);
-
-      _client = SSHClient(
-        socket,
-        username: details.username,
-        identities: identities, // Usamos la identidad parseada
-        // Opcional: Fallback a contraseña si la llave falla o requiere 2FA
-        onPasswordRequest: () => details.password,
-      );
-
-      _sftpService = SFTPService(_client!);
-      return true;
-    } catch (e) {
-      _cleanup();
-      rethrow;
-    }
+  // Helper para cuando quieres conectar específicamente solo con contraseña (útil para el Manager)
+  Future<bool> connectWithPassword(GeneralConfig details) async {
+    return await connect(details, privateKeyPem: null);
   }
 
   Future<String> runSingleCommand(String command) async {
