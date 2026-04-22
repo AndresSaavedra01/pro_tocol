@@ -2,6 +2,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:pro_tocol/injection.dart';
 import 'package:xterm/xterm.dart';
 import 'package:dartssh2/dartssh2.dart';
 
@@ -14,16 +15,15 @@ import '../theme/AppColors.dart';
 
 class TempSessionPage extends StatefulWidget {
   final TempSessionConfig tempConfig;
-  final TempSessionController tempController;
 
   const TempSessionPage({
     super.key,
     required this.tempConfig,
-    required this.tempController,
   });
 
   @override
   State<TempSessionPage> createState() => _TempSessionPageState();
+  TempSessionController get _tempController => getIt<TempSessionController>();
 }
 
 class _TempSessionPageState extends State<TempSessionPage> {
@@ -52,7 +52,7 @@ class _TempSessionPageState extends State<TempSessionPage> {
   Future<void> _connectToTerminal() async {
     try {
       // 1. Obtenemos la sesión viva desde la memoria RAM del controlador
-      _activeSession = widget.tempController.getValidSession(widget.tempConfig.host);
+      _activeSession = widget._tempController.getValidSession(widget.tempConfig.host);
 
       // 2. Iniciamos la sesión con un tamaño base seguro
       _shellSession = await _activeSession!.sshService.createTerminal(
@@ -97,13 +97,13 @@ class _TempSessionPageState extends State<TempSessionPage> {
 void _handleTerminalInput(String input, SSHSession session) {
     // Detectar teclas de flecha para navegación del historial
     if (input == '\x1B[A') { // Flecha arriba
-      final previousCommand = widget.tempController.commandHistoryManager.previous();
+      final previousCommand = widget._tempController.commandHistoryManager.previous();
       if (previousCommand != null) {
         _updateCommandBuffer(previousCommand);
       }
       return;
     } else if (input == '\x1B[B') { // Flecha abajo
-      final nextCommand = widget.tempController.commandHistoryManager.next();
+      final nextCommand = widget._tempController.commandHistoryManager.next();
       if (nextCommand != null) {
         _updateCommandBuffer(nextCommand);
       } else {

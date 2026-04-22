@@ -1,30 +1,31 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:pro_tocol/controller/ServerCommandController.dart';
+import 'package:pro_tocol/injection.dart';
 import 'package:pro_tocol/logic/command_history_manager.dart';
 import 'package:pro_tocol/model/entities/Server.dart';
 import 'package:pro_tocol/model/entities/TempSession.dart';
 import 'package:pro_tocol/view/theme/AppColors.dart';
 
 class DistroLogsPage extends StatefulWidget {
-  final CommandHistoryManager commandHistoryManager;
   final Server? activeServer;
   final TempSession? activeSession;
 
   const DistroLogsPage({
     super.key,
-    required this.commandHistoryManager,
     this.activeServer,
     this.activeSession,
   });
 
   @override
   State<DistroLogsPage> createState() => _DistroLogsPageState();
+  ServerCommandController get _commandController => getIt<ServerCommandController>();
 }
 
 class _DistroLogsPageState extends State<DistroLogsPage> {
   @override
   Widget build(BuildContext context) {
-    final history = widget.commandHistoryManager.getHistory();
+    final history = widget._commandController.commandHistoryManager.getHistory();
     final distroName = widget.activeServer?.distroName ?? widget.activeSession?.distroName ?? 'Linux';
     final packageManager = widget.activeServer?.packageManager ?? widget.activeSession?.packageManager ?? 'unknown';
     final distroIcon = _getDistroIcon(distroName);
@@ -42,7 +43,7 @@ class _DistroLogsPageState extends State<DistroLogsPage> {
           IconButton(
             icon: const Icon(Icons.clear, color: AppColors.error),
             onPressed: () {
-              widget.commandHistoryManager.clear();
+              widget._commandController.commandHistoryManager.clear();
               setState(() {});
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(content: Text('Historial limpiado')),

@@ -2,6 +2,9 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:dartssh2/dartssh2.dart';
 import 'package:flutter/material.dart';
+import 'package:pro_tocol/controller/ServerCommandController.dart';
+import 'package:pro_tocol/controller/ServerConnectionController.dart';
+import 'package:pro_tocol/injection.dart';
 import 'package:pro_tocol/view/pages/server_tabs/AppsManagerTab.dart';
 import 'package:pro_tocol/view/pages/server_tabs/ArchivosTab.dart';
 import 'package:pro_tocol/view/pages/server_tabs/MonitorTab.dart';
@@ -10,7 +13,6 @@ import 'package:pro_tocol/view/pages/server_tabs/TerminalTab.dart';
 import 'package:pro_tocol/view/pages/server_tabs/TemplatesTab.dart';
 import 'package:xterm/xterm.dart';
 
-import 'package:pro_tocol/controller/ServerController.dart';
 import 'package:pro_tocol/model/entities/Server.dart';
 import '../../model/entities/DataBaseEntities.dart';
 import '../theme/AppColors.dart';
@@ -18,18 +20,18 @@ import '../theme/AppColors.dart';
 
 class ServerPage extends StatefulWidget {
   final ServerConfig serverConfig;
-  final ServerController serverController;
   final bool isTemporarySession;
 
   const ServerPage({
     super.key,
     required this.serverConfig,
-    required this.serverController,
     this.isTemporarySession = false,
   });
 
   @override
   State<ServerPage> createState() => _ServerPageState();
+  ServerConnectionController get _connectionController => getIt<ServerConnectionController>();
+  ServerCommandController get _commandController => getIt<ServerCommandController>();
 }
 
 class _ServerPageState extends State<ServerPage> {
@@ -46,7 +48,7 @@ class _ServerPageState extends State<ServerPage> {
 
   Future<void> _connectToServerController() async {
     try {
-      _activeServer = widget.serverController.getActiveServer(widget.serverConfig.id);
+      _activeServer = widget._connectionController.getActiveServer(widget.serverConfig.id);
 
       // Aseguramos que la UI se entere de que ya tenemos el _activeServer
       if (mounted) setState(() {});
@@ -80,11 +82,11 @@ class _ServerPageState extends State<ServerPage> {
 
   void _handleTerminalInput(String input, SSHSession session) {
     if (input == '\x1B[A') {
-      final cmd = widget.serverController.commandHistoryManager.previous();
+      final cmd = widget._commandController.commandHistoryManager.previous();
       if (cmd != null) _updateCommandBuffer(cmd);
       return;
     } else if (input == '\x1B[B') {
-      final cmd = widget.serverController.commandHistoryManager.next();
+      final cmd = widget._commandController.commandHistoryManager.next();
       if (cmd != null) { _updateCommandBuffer(cmd); } else { _clearCommandBuffer(); }
       return;
     } else if (input == '\r' || input == '\n') {
@@ -235,18 +237,15 @@ class _ServerPageState extends State<ServerPage> {
             ArchivosTab(activeServer: _activeServer),
             AppsManagerTab(
               serverConfig: widget.serverConfig,
-              serverController: widget.serverController,
               activeServer: _activeServer,
             ),
             TemplatesTab(
               serverConfig: widget.serverConfig,
-              serverController: widget.serverController,
               activeServer: _activeServer,
             ),
             // 3. NUEVO WIDGET DEL TAB
             SeguridadTab(
               serverConfig: widget.serverConfig,
-              serverController: widget.serverController,
             ),
           ],
         ),

@@ -2,22 +2,23 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart'; // Para descargar archivos
-import 'package:pro_tocol/controller/ServerController.dart';
+import 'package:pro_tocol/controller/ServerConnectionController.dart';
+import 'package:pro_tocol/injection.dart';
 import 'package:pro_tocol/model/entities/DataBaseEntities.dart';
 import '../../theme/AppColors.dart';
 
 class SeguridadTab extends StatefulWidget {
   final ServerConfig serverConfig;
-  final ServerController serverController;
 
   const SeguridadTab({
     super.key,
     required this.serverConfig,
-    required this.serverController,
   });
 
   @override
   State<SeguridadTab> createState() => _SeguridadTabState();
+
+  ServerConnectionController get _connectionController => getIt<ServerConnectionController>();
 }
 
 class _SeguridadTabState extends State<SeguridadTab> {
@@ -43,9 +44,9 @@ class _SeguridadTabState extends State<SeguridadTab> {
       final String? keyContent;
 
       if (esPublica) {
-        keyContent = await widget.serverController.sshKeyController.getPublicKey(keyId);
+        keyContent = await widget._connectionController.sshKeyController.getPublicKey(keyId);
       } else {
-        keyContent = await widget.serverController.sshKeyController.getPrivateKey(keyId);
+        keyContent = await widget._connectionController.sshKeyController.getPrivateKey(keyId);
       }
 
       if (keyContent == null) return;
@@ -96,10 +97,10 @@ class _SeguridadTabState extends State<SeguridadTab> {
     setState(() => _isLoading = true);
     try {
       // 1. Generar e instalar llaves
-      await widget.serverController.upgradeServerToKeyAuth(_currentConfig.id);
+      await widget._connectionController.upgradeServerToKeyAuth(_currentConfig.id);
 
       // 2. Refrescar la configuración local desde la DB para detectar que ya tiene keyPairId
-      final updated = await widget.serverController.getServerConfig(_currentConfig.id);
+      final updated = await widget._connectionController.getServerConfig(_currentConfig.id);
 
       if (mounted && updated != null) {
         setState(() {

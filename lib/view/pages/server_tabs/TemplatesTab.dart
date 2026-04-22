@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:pro_tocol/controller/ServerController.dart';
+import 'package:pro_tocol/controller/ServerTemplateController.dart';
+import 'package:pro_tocol/injection.dart';
 import 'package:pro_tocol/logic/template_model.dart';
 import 'package:pro_tocol/logic/template_run_result.dart';
 import 'package:pro_tocol/logic/template_step.dart';
@@ -10,18 +11,17 @@ import '../../theme/AppColors.dart';
 
 class TemplatesTab extends StatefulWidget {
   final ServerConfig serverConfig;
-  final ServerController serverController;
   final Server? activeServer;
 
   const TemplatesTab({
     super.key,
     required this.serverConfig,
-    required this.serverController,
     required this.activeServer,
   });
 
   @override
   State<TemplatesTab> createState() => _TemplatesTabState();
+  ServerTemplateController get _templateController => getIt<ServerTemplateController>();
 }
 
 class _TemplatesTabState extends State<TemplatesTab> {
@@ -223,7 +223,7 @@ EOF"''',
     });
 
     try {
-      final result = await widget.serverController.runTemplate(
+      final result = await widget._templateController.runTemplate(
         serverId: widget.serverConfig.id,
         template: template,
         onProgress: (progress, activeValidation, activeStep) {
