@@ -10,7 +10,6 @@ import 'package:pro_tocol/view/pages/WorkspacePage.dart';
 import 'package:pro_tocol/view/components/SshErrorDisplay.dart';
 
 class AppRouter {
-  // ELIMINADO: Ya no almacenamos los controladores aquí para pasarlos manualmente.
 
   AppRouter();
 

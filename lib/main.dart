@@ -29,15 +29,6 @@ void main() async {
   // los controladores del constructor, dejándolo limpio así:
   final appRouter = AppRouter();
 
-  /* * NOTA: Si mientras refactorizas, tu AppRouter TODAVÍA pide
-   * los controladores en el constructor y da error, puedes pasar
-   * temporalmente las dependencias desde GetIt de la siguiente forma:
-   * * final appRouter = AppRouter(
-   * profileController: getIt<ProfileController>(),
-   * serverController: getIt<ServerConnectionController>(), // O tu fachada temporal
-   * tempSessionController: getIt<TempSessionController>(),
-   * );
-   */
 
   runApp(MyApp(appRouter: appRouter));
 }
