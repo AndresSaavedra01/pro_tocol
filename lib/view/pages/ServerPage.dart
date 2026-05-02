@@ -37,7 +37,6 @@ class ServerPage extends StatefulWidget {
 class _ServerPageState extends State<ServerPage> {
   late final Terminal terminal;
   Server? _activeServer;
-  String _currentCommandBuffer = "";
 
   @override
   void initState() {
@@ -70,7 +69,11 @@ class _ServerPageState extends State<ServerPage> {
       session.stderr.listen((d) {
         if (mounted) terminal.write(utf8.decode(d, allowMalformed: true));
       });
-      terminal.onOutput = (input) => _handleTerminalInput(input, session);
+
+      // NUEVO: Enviar cada input inmediatamente al servidor
+      terminal.onOutput = (input) {
+        session.stdin.add(utf8.encode(input));
+      };
 
       terminal.write('\x1Bc');
       terminal.write('\x1B[32mConexión establecida.\x1B[0m\r\n\n');
@@ -78,48 +81,6 @@ class _ServerPageState extends State<ServerPage> {
     } catch (e) {
       if (mounted) terminal.write('\x1B[31mError: $e\x1B[0m\r\n');
     }
-  }
-
-  void _handleTerminalInput(String input, SSHSession session) {
-    if (input == '\x1B[A') {
-      final cmd = widget._commandController.commandHistoryManager.previous();
-      if (cmd != null) _updateCommandBuffer(cmd);
-      return;
-    } else if (input == '\x1B[B') {
-      final cmd = widget._commandController.commandHistoryManager.next();
-      if (cmd != null) { _updateCommandBuffer(cmd); } else { _clearCommandBuffer(); }
-      return;
-    } else if (input == '\r' || input == '\n') {
-      if (_currentCommandBuffer.isNotEmpty) {
-        session.stdin.add(utf8.encode('$_currentCommandBuffer\n'));
-        _currentCommandBuffer = "";
-      } else {
-        session.stdin.add(utf8.encode(input));
-      }
-      return;
-    } else if (input == '\x7F' || input == '\b') {
-      if (_currentCommandBuffer.isNotEmpty) {
-        _currentCommandBuffer = _currentCommandBuffer.substring(0, _currentCommandBuffer.length - 1);
-        terminal.write('\b \b');
-        return;
-      }
-    } else if (input.length == 1 && input.codeUnitAt(0) >= 32) {
-      _currentCommandBuffer += input;
-      terminal.write(input);
-      return;
-    }
-    session.stdin.add(utf8.encode(input));
-  }
-
-  void _updateCommandBuffer(String command) {
-    for (int i = 0; i < _currentCommandBuffer.length; i++) terminal.write('\b \b');
-    _currentCommandBuffer = command;
-    terminal.write(command);
-  }
-
-  void _clearCommandBuffer() {
-    for (int i = 0; i < _currentCommandBuffer.length; i++) terminal.write('\b \b');
-    _currentCommandBuffer = "";
   }
 
   void _startUniversalSync(SSHSession session) {
