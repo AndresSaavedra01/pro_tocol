@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import 'package:xterm/xterm.dart';
 
@@ -25,6 +24,9 @@ class TerminalTab extends StatelessWidget {
             terminal,
             autofocus: true,
             backgroundOpacity: 1,
+            // ARREGLO: Esto evita que el teclado del móvil use texto predictivo
+            // y rompa la sincronización de caracteres individuales con xterm
+            keyboardType: TextInputType.visiblePassword,
             theme: TerminalTheme(
               cursor: AppColors.textPrimary,
               selection: Colors.blueAccent.withOpacity(0.4),

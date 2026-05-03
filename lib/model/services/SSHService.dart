@@ -15,7 +15,6 @@ class SSHService {
   bool get isConnected => _client != null;
   SFTPService? get sftp => _sftpService;
 
-  // MÉTODO UNIFICADO: Ahora acepta opcionalmente el contenido de la llave privada
   Future<bool> connect(GeneralConfig details, {String? privateKeyPem}) async {
     try {
       config = details;
@@ -28,12 +27,9 @@ class SSHService {
       List<SSHKeyPair> identities = [];
       String? Function()? passwordHandler;
 
-      // Si recibimos el CONTENIDO de la llave (PEM), lo usamos
       if (privateKeyPem != null && privateKeyPem.isNotEmpty) {
         identities = SSHKeyPair.fromPem(privateKeyPem);
-      }
-      // Si no, usamos la contraseña
-      else if (details.password != null && details.password!.isNotEmpty) {
+      } else if (details.password != null && details.password!.isNotEmpty) {
         passwordHandler = () => details.password;
       }
 
@@ -52,7 +48,6 @@ class SSHService {
     }
   }
 
-  // Helper para cuando quieres conectar específicamente solo con contraseña (útil para el Manager)
   Future<bool> connectWithPassword(GeneralConfig details) async {
     return await connect(details, privateKeyPem: null);
   }
@@ -63,7 +58,6 @@ class SSHService {
     return utf8.decode(result).trim();
   }
 
-  // CPU via /proc/stat
   Future<ServerMetrics> fetchMetrics() async {
     if (_client == null) throw Exception('No conectado');
 
@@ -111,7 +105,6 @@ class SSHService {
     );
   }
 
-  // Red: velocidad real con dos muestras de /proc/net/dev
   Future<Map<String, String>> fetchNetworkStats() async {
     if (_client == null) return {'download': '—', 'upload': '—', 'ipv4': '—'};
 
@@ -162,7 +155,6 @@ class SSHService {
     return '${(bytesPerSec / (1024 * 1024)).toStringAsFixed(1)} MiB/s';
   }
 
-  // Top 30 procesos por CPU
   Future<List<ProcessNode>> fetchProcesses() async {
     if (_client == null) throw Exception('No conectado');
 
@@ -177,7 +169,6 @@ class SSHService {
         .toList();
   }
 
-  // Kill con fallback a sudo -n sin contraseña
   Future<({bool success, String message})> killProcess(String pid) async {
     if (_client == null) return (success: false, message: 'No conectado');
 
@@ -193,8 +184,8 @@ class SSHService {
 
     final err = r1.replaceAll(RegExp(r'__EXIT:\d+'), '').trim();
     return (
-      success: false,
-      message: err.isNotEmpty ? err : 'Sin permisos para PID $pid',
+    success: false,
+    message: err.isNotEmpty ? err : 'Sin permisos para PID $pid',
     );
   }
 
@@ -219,6 +210,4 @@ class SSHService {
     _sftpService = null;
     config = null;
   }
-
-
 }
