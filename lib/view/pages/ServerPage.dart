@@ -12,6 +12,7 @@ import 'package:pro_tocol/view/pages/server_tabs/SeguridadTab.dart';
 import 'package:pro_tocol/view/pages/server_tabs/TerminalTab.dart';
 import 'package:pro_tocol/view/pages/server_tabs/TemplatesTab.dart';
 import 'package:xterm/xterm.dart';
+import 'package:pro_tocol/view/pages/server_tabs/ChatIaTab.dart';
 
 import 'package:pro_tocol/model/entities/Server.dart';
 import '../../model/entities/DataBaseEntities.dart';
@@ -27,7 +28,47 @@ class ServerPage extends StatefulWidget {
     required this.serverConfig,
     this.isTemporarySession = false,
   });
-
+  void _showChatModal(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true, 
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return Padding(
+          padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+          child: Container(
+            height: MediaQuery.of(context).size.height * 0.7, // Altura del 70% de la pantalla
+            decoration: const BoxDecoration(
+              color: AppColors.background,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(25)),
+            ),
+            child: Column(
+              children: [
+                Container(
+                  margin: const EdgeInsets.symmetric(vertical: 12),
+                  height: 5,
+                  width: 40,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[600],
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                const Text(
+                  "Asistente Pro-Tocol IA",
+                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+                ),
+                const SizedBox(height: 8),
+                const Divider(color: Colors.white10, height: 1),
+                const Expanded(
+                  child: ChatIaTab(), //cargamos interfaz de burbujas
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
   @override
   State<ServerPage> createState() => _ServerPageState();
   ServerConnectionController get _connectionController => getIt<ServerConnectionController>();
@@ -37,7 +78,65 @@ class ServerPage extends StatefulWidget {
 class _ServerPageState extends State<ServerPage> {
   late final Terminal terminal;
   Server? _activeServer;
-
+  void _showChatModal(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent, 
+      barrierColor: Colors.black.withOpacity(0.6), 
+      builder: (context) {
+        return Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(context).viewInsets.bottom,
+          ),
+          child: Container(
+            height: MediaQuery.of(context).size.height * 0.72,
+            decoration: const BoxDecoration(
+              color: AppColors.surface, 
+              borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black45,
+                  blurRadius: 20,
+                  offset: Offset(0, -5),
+                )
+              ]
+            ),
+            child: Column(
+              children: [
+                // Barra decorativa mejorada
+                Container(
+                  margin: const EdgeInsets.only(top: 15, bottom: 8),
+                  height: 6,
+                  width: 50,
+                  decoration: BoxDecoration(
+                    color: AppColors.textMuted.withOpacity(0.4),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                // Título más limpio
+                const Text(
+                  "Asistente Pro-Tocol IA",
+                  style: TextStyle(
+                    color: AppColors.textPrimary,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                // Divisor más sutil
+                const Divider(color: Colors.white10, height: 1),
+                const Expanded(
+                  child: ChatIaTab(), 
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
   @override
   void initState() {
     super.initState();
@@ -205,6 +304,12 @@ class _ServerPageState extends State<ServerPage> {
               serverConfig: widget.serverConfig,
             ),
           ],
+        ),
+        floatingActionButton: FloatingActionButton(
+          backgroundColor: AppColors.primary,
+          elevation: 8,
+          child: const Icon(Icons.auto_awesome, color: Colors.white), // Icono IA
+          onPressed: () => _showChatModal(context),
         ),
       ),
     );
