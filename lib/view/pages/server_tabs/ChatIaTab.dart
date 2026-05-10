@@ -44,16 +44,18 @@ class _ChatIaTabState extends State<ChatIaTab> {
     _scrollToBottom();
 
     final aiIndex = _mensajes.length - 1;
+    final buffer = StringBuffer();
 
     try {
       await for (final chunk in _iaService.generateStream(textoUsuario)) {
         if (!mounted) return;
-        final current = _mensajes[aiIndex].text;
+        if (chunk.isEmpty) continue;
+        buffer.write(chunk);
         setState(() {
           if (_awaitingFirstChunk) {
             _awaitingFirstChunk = false;
           }
-          _mensajes[aiIndex] = ChatMessage(text: current + chunk, isUser: false);
+          _mensajes[aiIndex] = ChatMessage(text: buffer.toString(), isUser: false);
         });
         _scrollToBottom();
       }
@@ -65,6 +67,7 @@ class _ChatIaTabState extends State<ChatIaTab> {
         _mensajes[aiIndex] = ChatMessage(text: friendly, isUser: false);
       });
       _showConfigPromptIfNeeded(e, friendly);
+      _scrollToBottom();
     } finally {
       if (mounted) {
         setState(() {
