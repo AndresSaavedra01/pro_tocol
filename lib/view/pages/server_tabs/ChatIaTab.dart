@@ -39,7 +39,7 @@ class _ChatIaTabState extends State<ChatIaTab> {
     });
 
     _textController.clear();
-    _hacerScrollHaciaAbajo();
+    _scrollToBottom();
 
     final aiIndex = _mensajes.length - 1;
 
@@ -50,7 +50,7 @@ class _ChatIaTabState extends State<ChatIaTab> {
         setState(() {
           _mensajes[aiIndex] = ChatMessage(text: current + chunk, isUser: false);
         });
-        _hacerScrollHaciaAbajo();
+        _scrollToBottom();
       }
     } catch (e) {
       if (!mounted) return;
@@ -68,12 +68,12 @@ class _ChatIaTabState extends State<ChatIaTab> {
     }
   }
 
-  void _hacerScrollHaciaAbajo() {
+  void _scrollToBottom() {
     Future.delayed(const Duration(milliseconds: 100), () {
       if (_scrollController.hasClients) {
         _scrollController.animateTo(
           _scrollController.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 300),
+          duration: const Duration(milliseconds: 250),
           curve: Curves.easeOut,
         );
       }
