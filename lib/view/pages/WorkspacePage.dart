@@ -173,6 +173,10 @@ class _WorkspacePageState extends State<WorkspacePage> {
         iconTheme: const IconThemeData(color: AppColors.textPrimary),
         actions: [
           IconButton(
+            icon: const Icon(Icons.smart_toy_outlined, size: 20),
+            onPressed: () => context.push('/ai-settings'),
+          ),
+          IconButton(
             icon: const Icon(Icons.arrow_back, size: 20),
             onPressed: () => context.pop(), // REFACTORIZADO
           )

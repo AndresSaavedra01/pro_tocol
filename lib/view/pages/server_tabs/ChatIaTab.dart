@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+import 'package:pro_tocol/injection.dart';
 import 'package:pro_tocol/model/entities/chat_message.dart';
+import 'package:pro_tocol/model/services/ia_service.dart';
 import 'package:pro_tocol/view/components/chat_bubble.dart';
-import 'package:pro_tocol/view/theme/AppColors.dart'; 
+import 'package:pro_tocol/view/theme/AppColors.dart';
 
 class ChatIaTab extends StatefulWidget {
   const ChatIaTab({super.key});
@@ -13,7 +16,10 @@ class ChatIaTab extends StatefulWidget {
 class _ChatIaTabState extends State<ChatIaTab> {
   final TextEditingController _textController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
-  
+  bool _isSending = false;
+
+  IAService get _iaService => getIt<IAService>();
+
   final List<ChatMessage> _mensajes = [
     ChatMessage(
       text: "¡Hola! Soy tu asistente de Pro-Tocol impulsado por IA. ¿En qué te puedo ayudar con este servidor hoy?",
@@ -21,32 +27,45 @@ class _ChatIaTabState extends State<ChatIaTab> {
     )
   ];
 
-  void _enviarMensaje() {
-    if (_textController.text.trim().isEmpty) return;
-
-    final textoUsuario = _textController.text;
+  Future<void> _enviarMensaje() async {
+    if (_isSending) return;
+    final textoUsuario = _textController.text.trim();
+    if (textoUsuario.isEmpty) return;
 
     setState(() {
       _mensajes.add(ChatMessage(text: textoUsuario, isUser: true));
+      _mensajes.add(ChatMessage(text: '', isUser: false));
+      _isSending = true;
     });
 
     _textController.clear();
     _hacerScrollHaciaAbajo();
 
-    // Simulación de respuesta de la IA
-    Future.delayed(const Duration(seconds: 1), () {
-      if (mounted) {
+    final aiIndex = _mensajes.length - 1;
+
+    try {
+      await for (final chunk in _iaService.generateStream(textoUsuario)) {
+        if (!mounted) return;
+        final current = _mensajes[aiIndex].text;
         setState(() {
-          _mensajes.add(
-            ChatMessage(
-              text: "He recibido tu mensaje sobre: *$textoUsuario*. Estoy listo para ayudarte a gestionar tu servidor.",
-              isUser: false,
-            ),
-          );
+          _mensajes[aiIndex] = ChatMessage(text: current + chunk, isUser: false);
         });
         _hacerScrollHaciaAbajo();
       }
-    });
+    } catch (e) {
+      if (!mounted) return;
+      final friendly = _friendlyErrorMessage(e);
+      setState(() {
+        _mensajes[aiIndex] = ChatMessage(text: friendly, isUser: false);
+      });
+      _showConfigPromptIfNeeded(e, friendly);
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSending = false;
+        });
+      }
+    }
   }
 
   void _hacerScrollHaciaAbajo() {
@@ -61,11 +80,45 @@ class _ChatIaTabState extends State<ChatIaTab> {
     });
   }
 
+  String _friendlyErrorMessage(Object error) {
+    final message = error.toString();
+    if (_isConfigError(message)) {
+      return 'La IA no esta configurada o faltan credenciales. Ve a Ajustes de IA.';
+    }
+    return 'No se pudo obtener respuesta: $message';
+  }
+
+  bool _isConfigError(String message) {
+    final lower = message.toLowerCase();
+    return lower.contains('configuracion') ||
+        lower.contains('token') ||
+        lower.contains('modelo');
+  }
+
+  void _showConfigPromptIfNeeded(Object error, String fallbackMessage) {
+    final message = error.toString();
+    if (_isConfigError(message)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Configura la IA para continuar.'),
+          action: SnackBarAction(
+            label: 'Configurar',
+            onPressed: () => context.push('/ai-settings'),
+          ),
+        ),
+      );
+      return;
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(fallbackMessage)),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
-        // Lista de mensajes
         Expanded(
           child: ListView.builder(
             controller: _scrollController,
@@ -76,12 +129,10 @@ class _ChatIaTabState extends State<ChatIaTab> {
             },
           ),
         ),
-        
-        // Caja de entrada de texto (Input)
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 10.0),
           decoration: BoxDecoration(
-            color: AppColors.surface, 
+            color: AppColors.surface,
             boxShadow: [
               BoxShadow(
                 offset: const Offset(0, -2),
@@ -97,6 +148,7 @@ class _ChatIaTabState extends State<ChatIaTab> {
                 Expanded(
                   child: TextField(
                     controller: _textController,
+                    enabled: !_isSending,
                     decoration: InputDecoration(
                       hintText: "Pregúntale a la IA...",
                       hintStyle: const TextStyle(color: AppColors.textMuted),
@@ -113,17 +165,14 @@ class _ChatIaTabState extends State<ChatIaTab> {
                   ),
                 ),
                 const SizedBox(width: 10),
-                
-                //  boton de enviar
                 Material(
-                  color: AppColors.primary, 
-                  shape: const CircleBorder(), 
-                  elevation: 4, 
-                  clipBehavior: Clip.antiAlias, 
+                  color: AppColors.primary,
+                  shape: const CircleBorder(),
+                  elevation: 4,
+                  clipBehavior: Clip.antiAlias,
                   child: InkWell(
-                    onTap: _enviarMensaje,
-
-                    splashColor: Colors.white.withOpacity(0.1), 
+                    onTap: _isSending ? null : _enviarMensaje,
+                    splashColor: Colors.white.withOpacity(0.1),
                     highlightColor: Colors.white.withOpacity(0.05),
                     child: Ink(
                       child: const Padding(

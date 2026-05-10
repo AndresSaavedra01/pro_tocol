@@ -1,11 +1,15 @@
 import 'package:get_it/get_it.dart';
 import 'package:isar/isar.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 // --- DAOs ---
+import 'package:pro_tocol/model/daos/AiConfigDAO.dart';
 import 'package:pro_tocol/model/daos/ProfileDAO.dart';
 import 'package:pro_tocol/model/daos/ServerConfigDAO.dart';
+import 'package:pro_tocol/model/services/ia_service.dart';
 
 // --- Repositorios ---
+import 'package:pro_tocol/model/repositories/AiConfigRepository.dart';
 import 'package:pro_tocol/model/repositories/ProfileRepository.dart';
 import 'package:pro_tocol/model/repositories/ServerRepository.dart';
 import 'package:pro_tocol/model/repositories/TempSessionRepository.dart';
@@ -27,13 +31,24 @@ final getIt = GetIt.instance;
 
 Future<void> setupDependencies(Isar isar) async {
   // 1. DAOs
+  final aiConfigDAO = AiConfigDAO(isar);
   final profileDAO = ProfileDAO(isar);
   final serverConfigDAO = ServerConfigDAO(isar);
 
   // 2. Repositorios
+  getIt.registerLazySingleton<FlutterSecureStorage>(() => const FlutterSecureStorage());
+  getIt.registerLazySingleton<AiConfigRepository>(() => AiConfigRepository(
+    aiConfigDAO,
+    getIt<FlutterSecureStorage>(),
+  ));
   getIt.registerLazySingleton<ProfileRepository>(() => ProfileRepository(profileDAO));
   getIt.registerLazySingleton<ServerRepository>(() => ServerRepository(serverConfigDAO));
   getIt.registerLazySingleton<TempSessionRepository>(() => TempSessionRepository());
+
+  // 2. Servicios
+  getIt.registerLazySingleton<IAService>(() => IAService(
+    getIt<AiConfigRepository>(),
+  ));
 
   // 3. Managers
   getIt.registerLazySingleton<CommandHistoryManager>(() => CommandHistoryManager());
