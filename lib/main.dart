@@ -17,7 +17,7 @@ void main() async {
 
   final dir = await getApplicationDocumentsDirectory();
   final isar = await Isar.open(
-    [ProfileSchema, ServerConfigSchema],
+    [ProfileSchema, ServerConfigSchema, AiConfigSchema],
     directory: dir.path,
   );
 

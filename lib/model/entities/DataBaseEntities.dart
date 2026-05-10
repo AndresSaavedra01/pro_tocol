@@ -31,3 +31,20 @@ class ServerConfig implements GeneralConfig {
   @Backlink(to: 'servers')
   final profile = IsarLink<Profile>();
 }
+
+@Collection()
+class AiConfig {
+  Id id = Isar.autoIncrement;
+
+  String provider;
+  String host;
+  int port;
+  String model;
+
+  AiConfig({
+    this.provider = 'ollama',
+    this.host = '127.0.0.1',
+    this.port = 11434,
+    this.model = '',
+  });
+}

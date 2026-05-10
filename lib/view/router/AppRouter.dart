@@ -6,6 +6,7 @@ import 'package:pro_tocol/model/entities/DataBaseEntities.dart';
 
 // --- Páginas ---
 import 'package:pro_tocol/view/pages/ProfilePage.dart';
+import 'package:pro_tocol/view/pages/AiSettingsPage.dart';
 import 'package:pro_tocol/view/pages/WorkspacePage.dart';
 import 'package:pro_tocol/view/components/SshErrorDisplay.dart';
 
@@ -50,6 +51,11 @@ class AppRouter {
             },
           );
         },
+      ),
+
+      GoRoute(
+        path: '/ai-settings',
+        builder: (context, state) => const AiSettingsPage(),
       ),
 
       // --- Ruta: Error Display ---
