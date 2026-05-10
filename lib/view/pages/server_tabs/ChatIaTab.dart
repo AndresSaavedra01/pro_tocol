@@ -17,6 +17,7 @@ class _ChatIaTabState extends State<ChatIaTab> {
   final TextEditingController _textController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   bool _isSending = false;
+  bool _awaitingFirstChunk = false;
 
   IAService get _iaService => getIt<IAService>();
 
@@ -36,6 +37,7 @@ class _ChatIaTabState extends State<ChatIaTab> {
       _mensajes.add(ChatMessage(text: textoUsuario, isUser: true));
       _mensajes.add(ChatMessage(text: '', isUser: false));
       _isSending = true;
+      _awaitingFirstChunk = true;
     });
 
     _textController.clear();
@@ -48,6 +50,9 @@ class _ChatIaTabState extends State<ChatIaTab> {
         if (!mounted) return;
         final current = _mensajes[aiIndex].text;
         setState(() {
+          if (_awaitingFirstChunk) {
+            _awaitingFirstChunk = false;
+          }
           _mensajes[aiIndex] = ChatMessage(text: current + chunk, isUser: false);
         });
         _scrollToBottom();
@@ -56,6 +61,7 @@ class _ChatIaTabState extends State<ChatIaTab> {
       if (!mounted) return;
       final friendly = _friendlyErrorMessage(e);
       setState(() {
+        _awaitingFirstChunk = false;
         _mensajes[aiIndex] = ChatMessage(text: friendly, isUser: false);
       });
       _showConfigPromptIfNeeded(e, friendly);
@@ -63,6 +69,7 @@ class _ChatIaTabState extends State<ChatIaTab> {
       if (mounted) {
         setState(() {
           _isSending = false;
+          _awaitingFirstChunk = false;
         });
       }
     }
@@ -125,7 +132,11 @@ class _ChatIaTabState extends State<ChatIaTab> {
             padding: const EdgeInsets.all(12.0),
             itemCount: _mensajes.length,
             itemBuilder: (context, index) {
-              return ChatBubble(message: _mensajes[index]);
+              final message = _mensajes[index];
+              if (!message.isUser && message.text.isEmpty && _awaitingFirstChunk) {
+                return const _TypingIndicatorBubble();
+              }
+              return ChatBubble(message: message);
             },
           ),
         ),
@@ -199,5 +210,43 @@ class _ChatIaTabState extends State<ChatIaTab> {
     _textController.dispose();
     _scrollController.dispose();
     super.dispose();
+  }
+}
+
+class _TypingIndicatorBubble extends StatelessWidget {
+  const _TypingIndicatorBubble();
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Container(
+        margin: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
+        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceHighlight,
+          borderRadius: const BorderRadius.only(
+            topLeft: Radius.circular(16),
+            topRight: Radius.circular(16),
+            bottomRight: Radius.circular(16),
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: const [
+            Text('Escribiendo...', style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
+            SizedBox(height: 6),
+            SizedBox(
+              width: 120,
+              child: LinearProgressIndicator(
+                minHeight: 2,
+                backgroundColor: AppColors.surface,
+                valueColor: AlwaysStoppedAnimation(AppColors.primary),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
