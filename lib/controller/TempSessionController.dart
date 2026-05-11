@@ -1,18 +1,10 @@
 
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
-
-import 'package:pro_tocol/logic/apps_manager_catalog.dart';
-import 'package:pro_tocol/logic/apps_manager_state.dart';
 import 'package:pro_tocol/model/entities/TempSession.dart';
 import 'package:pro_tocol/model/entities/TempSessionConfig.dart';
 import 'package:pro_tocol/model/repositories/TempSessionRepository.dart';
 import 'package:pro_tocol/logic/command_history_manager.dart';
-import 'package:pro_tocol/logic/package_install_command_builder.dart';
-import 'package:pro_tocol/logic/template_model.dart';
-import 'package:pro_tocol/logic/template_run_result.dart';
-import 'package:pro_tocol/logic/template_step.dart';
 
 class TempSessionController {
   final TempSessionRepository _repository;

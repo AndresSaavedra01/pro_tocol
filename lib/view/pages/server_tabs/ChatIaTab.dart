@@ -5,6 +5,7 @@ import 'package:pro_tocol/model/entities/chat_message.dart';
 import 'package:pro_tocol/model/services/ia_service.dart';
 import 'package:pro_tocol/view/components/chat_bubble.dart';
 import 'package:pro_tocol/view/theme/AppColors.dart';
+import 'package:xterm/xterm.dart';
 
 class ChatIaTab extends StatefulWidget {
   const ChatIaTab({super.key});
@@ -78,6 +79,56 @@ class _ChatIaTabState extends State<ChatIaTab> {
     }
   }
 
+  Future<void> _executeInTerminal(String command) async {
+    final trimmed = command.trim();
+    if (trimmed.isEmpty) return;
+
+    final isMultiLine = trimmed.contains('\n') || trimmed.contains('\r');
+    if (isMultiLine) {
+      final shouldRun = await _confirmMultiLineCommand(trimmed);
+      if (!shouldRun) return;
+    }
+
+    final terminal = getIt<Terminal>();
+    terminal.textInput(trimmed);
+    terminal.keyInput(TerminalKey.enter);
+    _scrollToBottom();
+  }
+
+  Future<bool> _confirmMultiLineCommand(String command) async {
+    if (!mounted) return false;
+
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: AppColors.surface,
+          title: const Text(
+            'Ejecutar comando de varias lineas',
+            style: TextStyle(color: AppColors.textPrimary),
+          ),
+          content: Text(
+            'Este comando tiene varias lineas. Quieres ejecutarlo en la terminal activa?',
+            style: const TextStyle(color: AppColors.textSecondary),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancelar'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              style: TextButton.styleFrom(foregroundColor: AppColors.primary),
+              child: const Text('Ejecutar'),
+            ),
+          ],
+        );
+      },
+    );
+
+    return result ?? false;
+  }
+
   void _scrollToBottom() {
     Future.delayed(const Duration(milliseconds: 100), () {
       if (_scrollController.hasClients) {
@@ -139,7 +190,10 @@ class _ChatIaTabState extends State<ChatIaTab> {
               if (!message.isUser && message.text.isEmpty && _awaitingFirstChunk) {
                 return const _TypingIndicatorBubble();
               }
-              return ChatBubble(message: message);
+              return ChatBubble(
+                message: message,
+                onExecuteCommand: message.isUser ? null : _executeInTerminal,
+              );
             },
           ),
         ),

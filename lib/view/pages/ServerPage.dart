@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:dartssh2/dartssh2.dart';
 import 'package:flutter/material.dart';
-import 'package:pro_tocol/controller/ServerCommandController.dart';
 import 'package:pro_tocol/controller/ServerConnectionController.dart';
 import 'package:pro_tocol/injection.dart';
 import 'package:pro_tocol/view/pages/server_tabs/AppsManagerTab.dart';
@@ -28,51 +27,9 @@ class ServerPage extends StatefulWidget {
     required this.serverConfig,
     this.isTemporarySession = false,
   });
-  void _showChatModal(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true, 
-      backgroundColor: Colors.transparent,
-      builder: (context) {
-        return Padding(
-          padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-          child: Container(
-            height: MediaQuery.of(context).size.height * 0.7, // Altura del 70% de la pantalla
-            decoration: const BoxDecoration(
-              color: AppColors.background,
-              borderRadius: BorderRadius.vertical(top: Radius.circular(25)),
-            ),
-            child: Column(
-              children: [
-                Container(
-                  margin: const EdgeInsets.symmetric(vertical: 12),
-                  height: 5,
-                  width: 40,
-                  decoration: BoxDecoration(
-                    color: Colors.grey[600],
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                ),
-                const Text(
-                  "Asistente Pro-Tocol IA",
-                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
-                ),
-                const SizedBox(height: 8),
-                const Divider(color: Colors.white10, height: 1),
-                const Expanded(
-                  child: ChatIaTab(), //cargamos interfaz de burbujas
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
   @override
   State<ServerPage> createState() => _ServerPageState();
   ServerConnectionController get _connectionController => getIt<ServerConnectionController>();
-  ServerCommandController get _commandController => getIt<ServerCommandController>();
 }
 
 class _ServerPageState extends State<ServerPage> {
@@ -140,7 +97,7 @@ class _ServerPageState extends State<ServerPage> {
   @override
   void initState() {
     super.initState();
-    terminal = Terminal(maxLines: 10000);
+    terminal = getIt<Terminal>();
     _connectToServerController();
   }
 

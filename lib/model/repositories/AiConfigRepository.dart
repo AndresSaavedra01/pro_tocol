@@ -1,5 +1,6 @@
 
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:isar/isar.dart';
 import 'package:pro_tocol/model/daos/AiConfigDAO.dart';
 import 'package:pro_tocol/model/entities/DataBaseEntities.dart';
 
