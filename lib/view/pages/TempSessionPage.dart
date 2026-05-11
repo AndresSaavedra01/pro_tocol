@@ -35,7 +35,7 @@ class _TempSessionPageState extends State<TempSessionPage> {
   @override
   void initState() {
     super.initState();
-    terminal = Terminal(maxLines: 10000);
+    terminal = getIt<Terminal>();
     _connectToTerminal();
   }
 

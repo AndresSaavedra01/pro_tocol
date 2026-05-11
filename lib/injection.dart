@@ -1,6 +1,7 @@
 import 'package:get_it/get_it.dart';
 import 'package:isar/isar.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:xterm/xterm.dart';
 
 // --- DAOs ---
 import 'package:pro_tocol/model/daos/AiConfigDAO.dart';
@@ -52,6 +53,9 @@ Future<void> setupDependencies(Isar isar) async {
 
   // 3. Managers
   getIt.registerLazySingleton<CommandHistoryManager>(() => CommandHistoryManager());
+
+  // 3.1 Terminal (singleton compartido con el Tab activo)
+  getIt.registerLazySingleton<Terminal>(() => Terminal(maxLines: 10000));
 
   // 4. Controladores Globales
   getIt.registerLazySingleton<SshKeyController>(() => SshKeyController());
