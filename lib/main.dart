@@ -4,6 +4,7 @@ import 'package:path_provider/path_provider.dart';
 
 // --- Entidades ---
 import 'package:pro_tocol/model/entities/DataBaseEntities.dart';
+import 'package:pro_tocol/model/entities/chat_message_entity.dart';
 
 // --- Enrutador ---
 import 'package:pro_tocol/view/router/AppRouter.dart';
@@ -17,7 +18,8 @@ void main() async {
 
   final dir = await getApplicationDocumentsDirectory();
   final isar = await Isar.open(
-    [ProfileSchema, ServerConfigSchema, AiConfigSchema],
+    [ProfileSchema, ServerConfigSchema, AiConfigSchema,ChatMessageEntitySchema,],
+    name: "db_v3",
     directory: dir.path,
   );
 

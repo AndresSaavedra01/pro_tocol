@@ -1,6 +1,7 @@
 import 'package:get_it/get_it.dart';
 import 'package:isar/isar.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:pro_tocol/model/repositories/ChatHistoryRepository.dart';
 import 'package:xterm/xterm.dart';
 
 // --- DAOs ---
@@ -85,4 +86,6 @@ Future<void> setupDependencies(Isar isar) async {
     getIt<ServerConnectionController>(),
     getIt<CommandHistoryManager>(),
   ));
+  getIt.registerLazySingleton<ChatHistoryRepository>(() => ChatHistoryRepository(isar)
+  );
 }

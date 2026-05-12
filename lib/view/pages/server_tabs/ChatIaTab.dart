@@ -2,13 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:pro_tocol/injection.dart';
 import 'package:pro_tocol/model/entities/chat_message.dart';
+import 'package:pro_tocol/model/entities/chat_message_entity.dart';
+import 'package:pro_tocol/model/repositories/ChatHistoryRepository.dart';
 import 'package:pro_tocol/model/services/ia_service.dart';
 import 'package:pro_tocol/view/components/chat_bubble.dart';
 import 'package:pro_tocol/view/theme/AppColors.dart';
 import 'package:xterm/xterm.dart';
 
 class ChatIaTab extends StatefulWidget {
-  const ChatIaTab({super.key});
+  final String serverIp;
+  const ChatIaTab({super.key,required this.serverIp,});
 
   @override
   State<ChatIaTab> createState() => _ChatIaTabState();
@@ -21,22 +24,56 @@ class _ChatIaTabState extends State<ChatIaTab> {
   bool _awaitingFirstChunk = false;
 
   IAService get _iaService => getIt<IAService>();
+  ChatHistoryRepository get _historyRepo => getIt<ChatHistoryRepository>();
 
-  final List<ChatMessage> _mensajes = [
-    ChatMessage(
-      text: "¡Hola! Soy tu asistente de Pro-Tocol impulsado por IA. ¿En qué te puedo ayudar con este servidor hoy?",
-      isUser: false,
-    )
-  ];
+  // La lista empieza vacía porque se cargará de la DB
+  List<ChatMessage> _mensajes = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _cargarHistorial();
+  }
+
+  Future<void> _cargarHistorial() async {
+    final mensajesDb = await _historyRepo.getMessagesByServer(widget.serverIp);
+    
+    setState(() {
+      if (mensajesDb.isEmpty) {
+        // Si no hay mensajes guardados, mostramos el saludo inicial
+        _mensajes = [
+          ChatMessage(
+            text: "¡Hola! Soy tu asistente de Pro-Tocol. ¿En qué te puedo ayudar con el servidor ${widget.serverIp}?",
+            isUser: false,
+          )
+        ];
+      } else {
+        // Convertimos las entidades de Isar al modelo ChatMessage de la UI
+        _mensajes = mensajesDb.map((e) => ChatMessage(
+          text: e.content,
+          isUser: e.role == 'user',
+        )).toList();
+      }
+    });
+    _scrollToBottom();
+  }
 
   Future<void> _enviarMensaje() async {
     if (_isSending) return;
     final textoUsuario = _textController.text.trim();
     if (textoUsuario.isEmpty) return;
 
+    // Guardar mensaje del usuario en la Base de Datos
+    await _historyRepo.saveMessage(ChatMessageEntity(
+      serverIp: widget.serverIp,
+      role: 'user',
+      content: textoUsuario,
+      timestamp: DateTime.now(),
+    ));
+
     setState(() {
       _mensajes.add(ChatMessage(text: textoUsuario, isUser: true));
-      _mensajes.add(ChatMessage(text: '', isUser: false));
+      _mensajes.add(ChatMessage(text: '', isUser: false)); // Espacio para la respuesta de la IA
       _isSending = true;
       _awaitingFirstChunk = true;
     });
@@ -60,6 +97,15 @@ class _ChatIaTabState extends State<ChatIaTab> {
         });
         _scrollToBottom();
       }
+
+      // Guardar la respuesta completa de la IA en la Base de Datos
+      await _historyRepo.saveMessage(ChatMessageEntity(
+        serverIp: widget.serverIp,
+        role: 'assistant',
+        content: buffer.toString(),
+        timestamp: DateTime.now(),
+      ));
+
     } catch (e) {
       if (!mounted) return;
       final friendly = _friendlyErrorMessage(e);
