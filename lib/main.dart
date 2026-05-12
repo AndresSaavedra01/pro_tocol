@@ -19,7 +19,6 @@ void main() async {
   final dir = await getApplicationDocumentsDirectory();
   final isar = await Isar.open(
     [ProfileSchema, ServerConfigSchema, AiConfigSchema,ChatMessageEntitySchema,],
-    name: "db_v3",
     directory: dir.path,
   );
 
