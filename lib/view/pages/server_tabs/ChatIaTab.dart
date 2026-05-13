@@ -37,7 +37,7 @@ class _ChatIaTabState extends State<ChatIaTab> {
 
   Future<void> _cargarHistorial() async {
     final mensajesDb = await _historyRepo.getMessagesByServer(widget.serverIp);
-    
+
     setState(() {
       if (mensajesDb.isEmpty) {
         // Si no hay mensajes guardados, mostramos el saludo inicial
@@ -85,7 +85,7 @@ class _ChatIaTabState extends State<ChatIaTab> {
     final buffer = StringBuffer();
 
     try {
-      await for (final chunk in _iaService.generateStream(textoUsuario)) {
+      await for (final chunk in _iaService.generateStream(textoUsuario, _mensajes)) {
         if (!mounted) return;
         if (chunk.isEmpty) continue;
         buffer.write(chunk);
