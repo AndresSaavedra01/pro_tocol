@@ -69,6 +69,54 @@ El objetivo de este primer bloque es establecer la base de conectividad, la pers
 5. **Navegación:** El explorador debe listar archivos de cualquier ruta solicitada (ej. `/etc` o `/var`).
 ## Notas de Implementación
 
-* Las **Sesiones Temporales** no se persisten en la base de datos local; se eliminan al cerrar la aplicación o la sesión.
-* El **Explorador de Archivos** en el Sprint 1 se limita a la visualización de la estructura de directorios para asegurar estabilidad.
-* La arquitectura debe garantizar que las tres pestañas del servidor mantengan su estado independiente durante la conexión activa.
+---
+
+---
+
+## Planificación: Sprint 2
+
+El objetivo de este segundo bloque es integrar el asistente de inteligencia artificial de forma completa, conectándolo a la terminal SSH activa y dotando al sistema de capacidades de diagnóstico, ejecución supervisada y persistencia de conversaciones.
+
+### Estructura de la Épica IA
+
+1. **Configuración y Cliente:** Integración con la API de Ollama y persistencia de credenciales.
+2. **Interfaz de Chat:** Componente visual de conversación con soporte de streaming token a token.
+3. **Bridge IA-Terminal:** Ejecución de bloques de código generados por la IA directamente en la terminal activa.
+4. **Contexto y Seguridad:** Inyección de metadatos del servidor y sanitización de scripts antes de su ejecución.
+5. **Historial y UX:** Persistencia de consultas entre sesiones y experiencia de carga fluida.
+
+---
+
+## Backlog del Sprint 2: Asistente IA con Ollama
+
+| ID | Historia de Usuario | Descripción / Criterios de Aceptación | SP |
+| :--- | :--- | :--- | :--- |
+| **ES-52** | **Refactorización de Arquitectura y Código Limpio** | Reestructuración del proyecto bajo principios SOLID, separación estricta de capas y eliminación de dependencias circulares. | 5 |
+| **ES-42** | **Cliente API (Ollama)** | Implementación del cliente HTTP para comunicarse con la API de Ollama. Soporte de streaming de respuesta y manejo de errores de red. | 5 |
+| **ES-43** | **Configuración de IA** | Pantalla de configuración para ingresar y persistir la URL base y credenciales de Ollama. Validación del endpoint antes de guardar. | 3 |
+| **ES-45** | **Interfaz de Chat** | Componente visual de conversación con burbujas diferenciadas (usuario / IA), auto-scroll y renderizado de bloques de código Markdown. | 3 |
+| **ES-47** | **Inyección de Contexto del Servidor** | Recolección automática de metadatos del servidor activo (distro, hardware, servicios) para incluirlos como contexto en cada prompt enviado a la IA. | 4 |
+| **ES-48** | **Seguridad y Sanitización** | Revisión y filtrado de los scripts generados por la IA antes de permitir su ejecución. Confirmación explícita del usuario para comandos destructivos. | 3 |
+| **ES-50** | **Historial de Consultas** | Persistencia del historial de chat en base de datos local (Hive/Isar). El contexto de la conversación se restaura al reiniciar la sesión. | 4 |
+| **ES-51** | **UX de Carga (Streaming)** | Visualización token a token de la respuesta de la IA mediante `StreamProvider`. Indicador de escritura animado mientras la respuesta llega. | 3 |
+| **ES-46** | **Bridge IA-Terminal** | Botón "Ejecutar en Terminal" en cada bloque de código del chat. Inyección del comando en la terminal xterm activa usando el singleton compartido. | 3 |
+| **ES-49** | **Explicador de Errores** | Captura automática de errores en la terminal SSH. Botón para enviar el error al asistente y recibir un diagnóstico con solución propuesta. | 5 |
+| **TOTAL** | | **Épica ES-44 completada al 100%** | **38** |
+
+---
+
+## Criterios de Aceptación Generales — Sprint 2 (DoD)
+
+1. **Conexión con Ollama:** La app debe conectarse a la API configurada y recibir respuestas en streaming sin errores de red.
+2. **Bridge funcional:** Un bloque de código generado por la IA debe poder ejecutarse en la terminal activa con un solo toque.
+3. **Contexto real:** Cada prompt enviado a la IA debe incluir los metadatos actuales del servidor conectado.
+4. **Seguridad:** Ningún comando marcado como destructivo puede ejecutarse sin confirmación explícita del usuario.
+5. **Persistencia:** El historial de conversación debe sobrevivir al cierre y reinicio de la aplicación.
+6. **Diagnóstico:** Al producirse un error en la terminal, el usuario puede enviarlo al asistente y recibir una propuesta de solución.
+
+## Notas de Implementación — Sprint 2
+
+* El **singleton `Terminal`** es compartido entre `TerminalTab` y `ChatIaTab` vía inyección de dependencias (`get_it`), garantizando que ambas pestañas operen sobre la misma instancia xterm.
+* La **captura de errores** se realiza en la capa SSH (no en xterm), utilizando un sentinel `__PROTO_EXIT__:$?` para detectar exit codes en shell interactivo sin interferir con el output normal.
+* El **streaming** se implementa con `StreamProvider` de Riverpod, permitiendo reconstrucciones de UI token a token sin afectar el rendimiento de la terminal SSH paralela.
+* Las **sesiones temporales** también tienen acceso al asistente de IA bajo la misma arquitectura de contexto que los servidores guardados.
