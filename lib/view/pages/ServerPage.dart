@@ -87,8 +87,8 @@ class _ServerPageState extends State<ServerPage> {
                 const SizedBox(height: 12),
                 // Divisor más sutil
                 const Divider(color: Colors.white10, height: 1),
-                Expanded(
-                  child: ChatIaTab(controller: _chatIaController),
+                const Expanded(
+                  child: ChatIaTab(), 
                 ),
               ],
             ),
