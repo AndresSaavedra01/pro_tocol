@@ -4,6 +4,7 @@ import 'package:dartssh2/dartssh2.dart';
 import 'package:flutter/material.dart';
 import 'package:pro_tocol/controller/ServerConnectionController.dart';
 import 'package:pro_tocol/injection.dart';
+import 'package:pro_tocol/logic/terminal_command_tracker.dart';
 import 'package:pro_tocol/view/pages/server_tabs/AppsManagerTab.dart';
 import 'package:pro_tocol/view/pages/server_tabs/ArchivosTab.dart';
 import 'package:pro_tocol/view/pages/server_tabs/MonitorTab.dart';
@@ -34,6 +35,8 @@ class ServerPage extends StatefulWidget {
 
 class _ServerPageState extends State<ServerPage> {
   late final Terminal terminal;
+  final TerminalCommandTracker _terminalTracker = TerminalCommandTracker();
+  final ChatIaController _chatIaController = ChatIaController();
   Server? _activeServer;
   void _showChatModal(BuildContext context) {
     showModalBottomSheet(
@@ -84,8 +87,8 @@ class _ServerPageState extends State<ServerPage> {
                 const SizedBox(height: 12),
                 // Divisor más sutil
                 const Divider(color: Colors.white10, height: 1),
-                const Expanded(
-                  child: ChatIaTab(), 
+                Expanded(
+                  child: ChatIaTab(controller: _chatIaController),
                 ),
               ],
             ),
@@ -99,6 +102,13 @@ class _ServerPageState extends State<ServerPage> {
     super.initState();
     terminal = getIt<Terminal>();
     _connectToServerController();
+  }
+
+  @override
+  void dispose() {
+    _terminalTracker.dispose();
+    _chatIaController.dispose();
+    super.dispose();
   }
 
   Future<void> _connectToServerController() async {
@@ -124,15 +134,22 @@ class _ServerPageState extends State<ServerPage> {
 
       // ARREGLO: Escuchadores únicos (se eliminaron los duplicados)
       session.stdout.listen((d) {
-        if (mounted) terminal.write(utf8.decode(d, allowMalformed: true));
+        final text = utf8.decode(d, allowMalformed: true);
+        _terminalTracker.observeStdout(text);
+        final filtered = _terminalTracker.filterStdoutForDisplay(text);
+        if (mounted && filtered.isNotEmpty) terminal.write(filtered);
       });
 
       session.stderr.listen((d) {
-        if (mounted) terminal.write(utf8.decode(d, allowMalformed: true));
+        final text = utf8.decode(d, allowMalformed: true);
+        _terminalTracker.observeStderr(text);
+        if (mounted) terminal.write(text);
       });
 
       terminal.onOutput = (input) {
-        session.stdin.add(utf8.encode(input));
+        _terminalTracker.handleInput(input, (payload) {
+          session.stdin.add(utf8.encode(payload));
+        });
       };
 
     } catch (e) {
@@ -162,6 +179,17 @@ class _ServerPageState extends State<ServerPage> {
     if (n.contains('fedora')) return '🛡️';
     if (n.contains('rhel') || n.contains('red hat')) return '🔥';
     return '🐧';
+  }
+
+  void _handleAskProTocol(String errorOutput) {
+    final prompt =
+        'El siguiente comando fallo en el servidor. Analiza el error y propone una solucion:\n\n$errorOutput';
+    _chatIaController.submitPrompt(
+      prompt,
+      userDisplay: 'Analiza este error del terminal.',
+    );
+    _terminalTracker.clearFailure();
+    _showChatModal(context);
   }
 
   @override
@@ -247,7 +275,11 @@ class _ServerPageState extends State<ServerPage> {
           physics: const NeverScrollableScrollPhysics(),
           children: [
             MonitorTab(activeServer: _activeServer),
-            TerminalTab(terminal: terminal),
+            TerminalTab(
+              terminal: terminal,
+              errorOutputListenable: _terminalTracker.failedOutput,
+              onAskProTocol: _handleAskProTocol,
+            ),
             ArchivosTab(activeServer: _activeServer),
             AppsManagerTab(
               serverConfig: widget.serverConfig,
