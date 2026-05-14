@@ -4,93 +4,55 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:pro_tocol/model/entities/DataBaseEntities.dart';
 import 'package:pro_tocol/model/repositories/AiConfigRepository.dart';
-
 import '../entities/chat_message.dart';
 
 class IAService {
-  // --- CONFIGURACIÓN DE DESARROLLO (Tu ".env") ---
+  // --- CONFIGURACIÓN DE NUBE ---
 
-  // 1. CAMBIA ESTO A 'true' para ignorar la configuración guardada en la base de datos
-  static const bool _useOnlyDevSettings = true;
+  // 1. Coloca aquí la URL completa de tu servidor en la nube (sin el /generar)
+  static const String _baseUrl = 'https://copyrighted-attribute-gage-spirit.trycloudflare.com';
 
-  // 2. Coloca aquí los datos de tu servidor FastAPI
-  static const String _devHost = '192.168.18.16'; // O '10.0.2.2' si usas emulador Android
-  static const int _devPort = 8000;
-  static const String _devApiKey = 'mi_super_secreto_123';
+  // 2. Tu API Key de seguridad definida en el .env del servidor
+  static const String _apiKey = 'mi_super_secreto_123';
 
   final AiConfigRepository _configRepository;
 
   IAService(this._configRepository);
 
   Stream<String> generateStream(String prompt, List<ChatMessage> historial) async* {
-    String host;
-    int port;
-    String token;
-    String model;
-
-    if (_useOnlyDevSettings) {
-      host = _devHost;
-      port = _devPort;
-      token = _devApiKey;
-      model = 'llama-3.3-70b-versatile';
-    } else {
-      final savedConfig = await _configRepository.getConfig();
-      final savedToken = await _configRepository.getToken();
-
-      host = (savedConfig != null && savedConfig.host.trim().isNotEmpty)
-          ? savedConfig.host.trim()
-          : _devHost;
-
-      port = (savedConfig != null && savedConfig.port != 0)
-          ? savedConfig.port
-          : _devPort;
-
-      token = (savedToken != null && savedToken.isNotEmpty)
-          ? savedToken
-          : _devApiKey;
-
-      model = (savedConfig != null && savedConfig.model.isNotEmpty)
-          ? savedConfig.model
-          : 'llama-3.3-70b-versatile';
-    }
-
-    // --- CONSTRUCCIÓN DEL HISTORIAL PARA EL BACKEND ---
-    // Mapeamos los mensajes de la UI al formato {'role': ..., 'content': ...}
+    // Mapeamos el historial al formato que espera el Backend
     final historialMap = historial.map((m) => {
       'role': m.isUser ? 'user' : 'assistant',
       'content': m.text,
     }).toList();
 
-    final url = Uri(
-      scheme: 'http',
-      host: host,
-      port: port,
-      path: '/generar/',
-    );
+    // El endpoint final
+    final url = Uri.parse('$_baseUrl/generar/');
 
     final request = http.Request('POST', url)
       ..headers.addAll({
         'Content-Type': 'application/json',
-        'X-API-Key': token,
+        'X-API-Key': _apiKey,
       })
       ..body = jsonEncode({
-        'historial': historialMap, // Enviamos toda la conversación
-        'modelo': model,
+        'historial': historialMap,
+        'modelo': 'llama-3.3-70b-versatile', // O el que prefieras por defecto
       });
 
     final client = http.Client();
 
     try {
       final response = await client.send(request).timeout(
-        const Duration(seconds: 15),
-        onTimeout: () => throw TimeoutException('El servidor FastAPI no respondió.'),
+        const Duration(seconds: 20),
+        onTimeout: () => throw TimeoutException('El servidor en la nube no respondió.'),
       );
 
       if (response.statusCode == 403) {
-        throw Exception('Token inválido en el servidor.');
+        throw Exception('Error de autenticación: API Key inválida.');
       }
+
       if (response.statusCode != 200) {
-        throw HttpException('Error ${response.statusCode}: ${response.reasonPhrase}');
+        throw HttpException('Error del servidor: ${response.statusCode}');
       }
 
       final stream = response.stream
@@ -107,11 +69,12 @@ class IAService {
             throw Exception(jsonResponse['error']);
           }
         } catch (e) {
+          // Ignorar errores de parsing en fragmentos incompletos
           continue;
         }
       }
     } on SocketException {
-      throw Exception('Error de red: No se pudo conectar a $host:$port.');
+      throw Exception('Error de conexión: No se pudo alcanzar el servidor en la nube.');
     } finally {
       client.close();
     }
@@ -120,8 +83,8 @@ class IAService {
   // --- MÉTODOS COMPLEMENTARIOS ---
 
   Future<void> testConnection() async {
-    // Para simplificar el test en la UI
-    await Future.delayed(const Duration(milliseconds: 300));
+    // Puedes llamar a un endpoint de salud si lo tienes, o simplemente un delay
+    await Future.delayed(const Duration(milliseconds: 500));
   }
 
   Future<List<String>> fetchModels() async {
