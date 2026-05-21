@@ -11,7 +11,12 @@ import 'package:xterm/xterm.dart';
 
 class ChatIaTab extends StatefulWidget {
   final String serverIp;
-  const ChatIaTab({super.key,required this.serverIp,});
+  final String profileId;
+  const ChatIaTab({
+    super.key,
+    required this.serverIp,
+    required this.profileId,
+  });
 
   @override
   State<ChatIaTab> createState() => _ChatIaTabState();
@@ -36,7 +41,7 @@ class _ChatIaTabState extends State<ChatIaTab> {
   }
 
   Future<void> _cargarHistorial() async {
-    final mensajesDb = await _historyRepo.getMessagesByServer(widget.serverIp);
+    final mensajesDb = await _historyRepo.getMessagesByServerAndProfile(widget.serverIp, widget.profileId);
 
     setState(() {
       if (mensajesDb.isEmpty) {
@@ -66,6 +71,7 @@ class _ChatIaTabState extends State<ChatIaTab> {
     // Guardar mensaje del usuario en la Base de Datos
     await _historyRepo.saveMessage(ChatMessageEntity(
       serverIp: widget.serverIp,
+      profileId: widget.profileId,
       role: 'user',
       content: textoUsuario,
       timestamp: DateTime.now(),
@@ -101,6 +107,7 @@ class _ChatIaTabState extends State<ChatIaTab> {
       // Guardar la respuesta completa de la IA en la Base de Datos
       await _historyRepo.saveMessage(ChatMessageEntity(
         serverIp: widget.serverIp,
+        profileId: widget.profileId,
         role: 'assistant',
         content: buffer.toString(),
         timestamp: DateTime.now(),

@@ -1,4 +1,3 @@
-
 import 'package:isar/isar.dart';
 import 'package:pro_tocol/model/daos/ServerConfigDAO.dart';
 import 'package:pro_tocol/model/entities/DataBaseEntities.dart';
@@ -18,12 +17,14 @@ class ServerRepository {
   }
 
   Future<ServerConfig?> getServerConfigById(Id id) async {
-    // Llama al método correspondiente en tu DAO para buscar por ID
     return await _serverConfigDAO.getServerConfigById(id);
+  }
+
+  Future<List<ServerConfig>> getServersByProfileId(String profileId) async {
+    return await _serverConfigDAO.getServersByProfileId(profileId);
   }
 
   Server buildServerFromConfig(ServerConfig config) {
     return Server(config: config);
   }
-
 }

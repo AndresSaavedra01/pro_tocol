@@ -1,4 +1,3 @@
-
 import 'package:isar/isar.dart';
 import 'package:pro_tocol/model/entities/DataBaseEntities.dart';
 
@@ -17,7 +16,8 @@ class ServerConfigDAO {
   Future<ServerConfig?> getServerConfigById(Id id) async {
     return await isar.serverConfigs.get(id);
   }
-  // Buscar servidores por host (ejemplo de query personalizada)
+
+  // Buscar servidores por host
   Future<List<ServerConfig>> findServersByHost(String host) async {
     return await isar.serverConfigs
         .filter()
@@ -25,10 +25,12 @@ class ServerConfigDAO {
         .findAll();
   }
 
-  // Obtener el perfil asociado a un servidor (vía Backlink)
-  Future<Profile?> getParentProfile(ServerConfig config) async {
-    await config.profile.load();
-    return config.profile.value;
+  // Obtener todos los servidores de un perfil específico
+  Future<List<ServerConfig>> getServersByProfileId(String profileId) async {
+    return await isar.serverConfigs
+        .filter()
+        .profileIdEqualTo(profileId)
+        .findAll();
   }
 
   // Eliminar un servidor

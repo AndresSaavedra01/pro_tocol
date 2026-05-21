@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 // --- Entidades ---
-import 'package:pro_tocol/model/entities/DataBaseEntities.dart';
+import 'package:pro_tocol/model/entities/Profile.dart';
 
 // --- Páginas ---
 import 'package:pro_tocol/view/pages/ProfilePage.dart';

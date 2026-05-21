@@ -1,4 +1,4 @@
-import 'package:pro_tocol/model/entities/DataBaseEntities.dart';
+import 'package:pro_tocol/model/entities/Profile.dart';
 import 'package:pro_tocol/model/repositories/ProfileRepository.dart';
 
 class ProfileController {
@@ -6,14 +6,13 @@ class ProfileController {
 
   ProfileController(this._profileRepository);
 
-  /// [READ] Obtiene todos los perfiles con sus servidores cargados
-  Future<List<Profile>> loadAllProfiles() async {
-    return await _profileRepository.getAllProfiles();
-  }
-
-  /// [CREATE] Crea un nuevo perfil validando el nombre
-  Future<Profile> createProfile(String name) async {
-    final cleanName = name.trim();
+  /// Sign up user
+  Future<Profile> signUp({
+    required String email,
+    required String password,
+    required String profileName,
+  }) async {
+    final cleanName = profileName.trim();
     if (cleanName.isEmpty) {
       throw ArgumentError('El nombre del perfil no puede estar vacío.');
     }
@@ -21,28 +20,37 @@ class ProfileController {
       throw ArgumentError('El nombre del perfil debe tener al menos 3 caracteres.');
     }
 
-    final newProfile = Profile()..profileName = cleanName;
-    await _profileRepository.saveProfile(newProfile);
-
-    return newProfile;
+    return await _profileRepository.signUp(
+      email: email,
+      password: password,
+      profileName: cleanName,
+    );
   }
 
-  /// [UPDATE] Actualiza un perfil existente
-  Future<void> updateProfile(Profile profile) async {
-    final cleanName = profile.profileName.trim();
-    if (cleanName.isEmpty) {
-      throw ArgumentError('El nombre del perfil no puede estar vacío.');
-    }
-    if (cleanName.length < 3) {
-      throw ArgumentError('El nombre del perfil debe tener al menos 3 caracteres.');
-    }
-
-    // Isar funciona como un "upsert": si el ID ya existe, lo sobrescribe (actualiza).
-    await _profileRepository.saveProfile(profile);
+  /// Sign in user
+  Future<Profile> signIn({
+    required String email,
+    required String password,
+  }) async {
+    return await _profileRepository.signIn(
+      email: email,
+      password: password,
+    );
   }
 
-  /// [DELETE] Elimina un perfil
-  Future<bool> deleteProfile(int id) async {
-    return await _profileRepository.deleteProfile(id);
+  /// Sign out user
+  Future<void> signOut() async {
+    await _profileRepository.signOut();
   }
+
+  /// Get current user profile
+  Future<Profile?> getCurrentProfile() async {
+    return await _profileRepository.getCurrentProfile();
+  }
+
+  /// Check if user is logged in
+  bool get isLoggedIn => _profileRepository.isLoggedIn;
+
+  /// Get auth state change stream
+  Stream<dynamic> get onAuthStateChange => _profileRepository.onAuthStateChange;
 }

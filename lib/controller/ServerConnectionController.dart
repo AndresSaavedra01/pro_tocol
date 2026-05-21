@@ -3,12 +3,10 @@ import 'package:flutter/foundation.dart';
 import 'package:pro_tocol/model/entities/DataBaseEntities.dart';
 import 'package:pro_tocol/model/entities/Server.dart';
 import 'package:pro_tocol/model/repositories/ServerRepository.dart';
-import 'package:pro_tocol/model/repositories/ProfileRepository.dart';
 import 'SshKeyController.dart';
 
 class ServerConnectionController {
   final ServerRepository _serverRepository;
-  final ProfileRepository _profileRepository;
   final SshKeyController sshKeyController;
 
   // MAPA VITAL: Mantiene vivas las conexiones. La llave es el ID del ServerConfig.
@@ -16,7 +14,6 @@ class ServerConnectionController {
 
   ServerConnectionController(
       this._serverRepository,
-      this._profileRepository,
       this.sshKeyController,
       );
 
@@ -25,7 +22,7 @@ class ServerConnectionController {
   /// ==========================================
 
   Future<ServerConfig> createAndLinkServer({
-    required int profileId,
+    required String profileId,
     required String host,
     required String username,
     required int port,
@@ -34,21 +31,16 @@ class ServerConnectionController {
   }) async {
     _validateServerInputs(host, username, port, password, keyPairId);
 
-    // Verificamos que el perfil exista antes de crear el servidor
-    final profile = await _profileRepository.getProfileById(profileId);
-    if (profile == null) {
-      throw Exception('El perfil con ID $profileId no existe.');
-    }
-
     final newConfig = ServerConfig()
+      ..profileId = profileId
       ..host = host.trim()
       ..username = username.trim()
       ..port = port
       ..password = password
       ..keyPairId = keyPairId;
 
-    // Guarda el servidor y lo vincula al perfil
-    await _profileRepository.addServerToProfile(profileId, newConfig);
+    // Guarda el servidor directamente
+    await _serverRepository.saveServerConfig(newConfig);
 
     return newConfig;
   }

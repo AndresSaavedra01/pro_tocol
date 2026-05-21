@@ -6,9 +6,11 @@ import 'package:xterm/xterm.dart';
 
 // --- DAOs ---
 import 'package:pro_tocol/model/daos/AiConfigDAO.dart';
-import 'package:pro_tocol/model/daos/ProfileDAO.dart';
 import 'package:pro_tocol/model/daos/ServerConfigDAO.dart';
+
+// --- Servicios ---
 import 'package:pro_tocol/model/services/ia_service.dart';
+import 'package:pro_tocol/model/services/AuthService.dart';
 
 // --- Repositorios ---
 import 'package:pro_tocol/model/repositories/AiConfigRepository.dart';
@@ -24,7 +26,7 @@ import 'package:pro_tocol/controller/ProfileController.dart';
 import 'package:pro_tocol/controller/TempSessionController.dart';
 import 'package:pro_tocol/controller/SshKeyController.dart';
 
-// --- Controladores Modulares (Nuevos) ---
+// --- Controladores Modulares ---
 import 'package:pro_tocol/controller/ServerConnectionController.dart';
 import 'package:pro_tocol/controller/ServerAppsController.dart';
 import 'package:pro_tocol/controller/ServerTemplateController.dart';
@@ -34,31 +36,33 @@ final getIt = GetIt.instance;
 Future<void> setupDependencies(Isar isar) async {
   // 1. DAOs
   final aiConfigDAO = AiConfigDAO(isar);
-  final profileDAO = ProfileDAO(isar);
   final serverConfigDAO = ServerConfigDAO(isar);
 
-  // 2. Repositorios
+  // 2. Servicios
+  getIt.registerLazySingleton<AuthService>(() => AuthService());
+
+  // 3. Repositorios
   getIt.registerLazySingleton<FlutterSecureStorage>(() => const FlutterSecureStorage());
   getIt.registerLazySingleton<AiConfigRepository>(() => AiConfigRepository(
     aiConfigDAO,
     getIt<FlutterSecureStorage>(),
   ));
-  getIt.registerLazySingleton<ProfileRepository>(() => ProfileRepository(profileDAO));
+  getIt.registerLazySingleton<ProfileRepository>(() => ProfileRepository(getIt<AuthService>()));
   getIt.registerLazySingleton<ServerRepository>(() => ServerRepository(serverConfigDAO));
   getIt.registerLazySingleton<TempSessionRepository>(() => TempSessionRepository());
 
-  // 2. Servicios
+  // 3.1 Servicio IA
   getIt.registerLazySingleton<IAService>(() => IAService(
     getIt<AiConfigRepository>(),
   ));
 
-  // 3. Managers
+  // 4. Managers
   getIt.registerLazySingleton<CommandHistoryManager>(() => CommandHistoryManager());
 
-  // 3.1 Terminal (singleton compartido con el Tab activo)
+  // 4.1 Terminal
   getIt.registerLazySingleton<Terminal>(() => Terminal(maxLines: 10000));
 
-  // 4. Controladores Globales
+  // 5. Controladores
   getIt.registerLazySingleton<SshKeyController>(() => SshKeyController());
 
   getIt.registerLazySingleton<ProfileController>(() => ProfileController(
@@ -70,10 +74,8 @@ Future<void> setupDependencies(Isar isar) async {
     getIt<CommandHistoryManager>(),
   ));
 
-  // 5. Nuevos Controladores del Servidor
   getIt.registerLazySingleton<ServerConnectionController>(() => ServerConnectionController(
     getIt<ServerRepository>(),
-    getIt<ProfileRepository>(),
     getIt<SshKeyController>(),
   ));
 
@@ -86,6 +88,6 @@ Future<void> setupDependencies(Isar isar) async {
     getIt<ServerConnectionController>(),
     getIt<CommandHistoryManager>(),
   ));
-  getIt.registerLazySingleton<ChatHistoryRepository>(() => ChatHistoryRepository(isar)
-  );
+
+  getIt.registerLazySingleton<ChatHistoryRepository>(() => ChatHistoryRepository(isar));
 }
