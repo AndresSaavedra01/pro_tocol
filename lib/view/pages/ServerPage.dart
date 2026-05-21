@@ -87,8 +87,10 @@ class _ServerPageState extends State<ServerPage> {
                 const SizedBox(height: 12),
                 // Divisor más sutil
                 const Divider(color: Colors.white10, height: 1),
-                const Expanded(
-                  child: ChatIaTab(), 
+                Expanded(
+                  child: ChatIaTab(
+                    serverIp: widget.serverConfig.host,
+                  ),
                 ),
               ],
             ),
