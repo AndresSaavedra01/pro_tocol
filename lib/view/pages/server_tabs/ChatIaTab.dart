@@ -9,6 +9,29 @@ import 'package:pro_tocol/view/components/chat_bubble.dart';
 import 'package:pro_tocol/view/theme/AppColors.dart';
 import 'package:xterm/xterm.dart';
 
+class ChatIaController extends ChangeNotifier {
+  final List<_ChatIaPrompt> _queue = [];
+
+  void submitPrompt(String prompt, {String? userDisplay}) {
+    _queue.add(_ChatIaPrompt(prompt, userDisplay));
+    notifyListeners();
+  }
+
+  _ChatIaPrompt? nextPending() {
+    if (_queue.isEmpty) return null;
+    return _queue.removeAt(0);
+  }
+
+  bool get hasPending => _queue.isNotEmpty;
+}
+
+class _ChatIaPrompt {
+  final String prompt;
+  final String? userDisplay;
+
+  const _ChatIaPrompt(this.prompt, this.userDisplay);
+}
+
 class ChatIaTab extends StatefulWidget {
   final String serverIp;
   final String profileId;
@@ -38,6 +61,8 @@ class _ChatIaTabState extends State<ChatIaTab> {
   void initState() {
     super.initState();
     _cargarHistorial();
+    widget.controller?.addListener(_handleExternalPrompt);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _handleExternalPrompt());
   }
 
   Future<void> _cargarHistorial() async {
@@ -77,21 +102,47 @@ class _ChatIaTabState extends State<ChatIaTab> {
       timestamp: DateTime.now(),
     ));
 
+    _textController.clear();
+    await _sendPromptInternal(prompt: textoUsuario, userDisplay: textoUsuario);
+  }
+
+  void _handleExternalPrompt() {
+    if (!mounted) return;
+    _drainExternalQueue();
+  }
+
+  void _drainExternalQueue() {
+    if (_isSending) return;
+    final controller = widget.controller;
+    if (controller == null) return;
+    final next = controller.nextPending();
+    if (next == null) return;
+    _sendPromptInternal(
+      prompt: next.prompt,
+      userDisplay: next.userDisplay ?? 'Analiza este error del terminal.',
+    );
+  }
+
+  Future<void> _sendPromptInternal({
+    required String prompt,
+    required String userDisplay,
+  }) async {
+    if (_isSending) return;
+
     setState(() {
-      _mensajes.add(ChatMessage(text: textoUsuario, isUser: true));
-      _mensajes.add(ChatMessage(text: '', isUser: false)); // Espacio para la respuesta de la IA
+      _mensajes.add(ChatMessage(text: userDisplay, isUser: true));
+      _mensajes.add(ChatMessage(text: '', isUser: false));
       _isSending = true;
       _awaitingFirstChunk = true;
     });
 
-    _textController.clear();
     _scrollToBottom();
 
     final aiIndex = _mensajes.length - 1;
     final buffer = StringBuffer();
 
     try {
-      await for (final chunk in _iaService.generateStream(textoUsuario, _mensajes)) {
+      await for (final chunk in _iaService.generateStream(prompt, _mensajes)) {
         if (!mounted) return;
         if (chunk.isEmpty) continue;
         buffer.write(chunk);
@@ -128,6 +179,9 @@ class _ChatIaTabState extends State<ChatIaTab> {
           _isSending = false;
           _awaitingFirstChunk = false;
         });
+      }
+      if (mounted) {
+        _drainExternalQueue();
       }
     }
   }
@@ -317,6 +371,7 @@ class _ChatIaTabState extends State<ChatIaTab> {
 
   @override
   void dispose() {
+    widget.controller?.removeListener(_handleExternalPrompt);
     _textController.dispose();
     _scrollController.dispose();
     super.dispose();
