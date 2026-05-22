@@ -71,27 +71,42 @@ class _ProfileScreenState extends State<ProfilePage> {
     final name = _nameController.text.trim();
 
     try {
-      Profile profile;
       if (_isRegisterMode) {
-        profile = await widget.profileController.signUp(
+        // 1. FLUJO DE REGISTRO
+        await widget.profileController.signUp(
           email: email,
           password: password,
           profileName: name,
         );
+
+        if (mounted) {
+          // Mostrar mensaje para que verifique el correo
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('¡Registro exitoso! Por favor revisa tu bandeja de entrada para verificar tu cuenta antes de iniciar sesión.'),
+              backgroundColor: AppColors.primary,
+              duration: Duration(seconds: 5),
+            ),
+          );
+          // Cambiar automáticamente a la vista de Iniciar Sesión
+          _toggleMode();
+        }
       } else {
-        profile = await widget.profileController.signIn(
+        // 2. FLUJO DE INICIO DE SESIÓN
+        final profile = await widget.profileController.signIn(
           email: email,
           password: password,
         );
-      }
 
-      if (mounted) {
-        // Navigate to workspace with the authenticated profile
-        context.go('/workspace', extra: profile);
+        if (mounted && profile != null) {
+          // Solo navegamos al workspace si el login fue exitoso (correo verificado)
+          context.go('/workspace', extra: profile);
+        }
       }
     } catch (e) {
       setState(() {
-        _errorMessage = e.toString().replaceAll('Exception: ', '');
+        // Supabase lanzará un error aquí si intentan hacer login sin haber verificado el correo
+        _errorMessage = e.toString().replaceAll('Exception: ', '').replaceAll('AuthException: ', '');
       });
     } finally {
       if (mounted) {
