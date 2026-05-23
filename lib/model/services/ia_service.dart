@@ -2,8 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
-import 'package:pro_tocol/model/entities/DataBaseEntities.dart';
-import 'package:pro_tocol/model/repositories/AiConfigRepository.dart';
 import '../entities/chat_message.dart';
 
 class IAService {
@@ -14,10 +12,6 @@ class IAService {
 
   // 2. Tu API Key de seguridad definida en el .env del servidor
   static const String _apiKey = 'mi_super_secreto_123';
-
-  final AiConfigRepository _configRepository;
-
-  IAService(this._configRepository);
 
   Stream<String> generateStream(String prompt, List<ChatMessage> historial) async* {
     // Mapeamos el historial al formato que espera el Backend

@@ -106,20 +106,38 @@ class _ChatIaTabState extends State<ChatIaTab> {
     try {
       final scriptCode = await _iaService.generarScript(prompt);
 
+      final assistantText = "He generado tu script:\n\n```bash\n$scriptCode\n```";
+
+      // ¡NUEVO! Guardamos en el historial el script generado por la IA
+      await _historyRepo.saveMessage(ChatMessageEntity(
+        serverIp: widget.serverIp,
+        profileId: widget.profileId,
+        role: 'assistant',
+        content: assistantText,
+        timestamp: DateTime.now(),
+      ));
+
       setState(() {
         _awaitingFirstChunk = false;
-        _mensajes[aiIndex] = ChatMessage(
-            text: "He generado tu script. Revisa la ventana emergente para confirmarlo.",
-            isUser: false);
+        _mensajes[aiIndex] = ChatMessage(text: assistantText, isUser: false);
       });
 
       if (mounted) _showScriptConfirmationDialog(scriptCode);
     } catch (e) {
       if (!mounted) return;
+      final errorText = "Error al generar script: $e";
+
+      await _historyRepo.saveMessage(ChatMessageEntity(
+        serverIp: widget.serverIp,
+        profileId: widget.profileId,
+        role: 'assistant',
+        content: errorText,
+        timestamp: DateTime.now(),
+      ));
+
       setState(() {
         _awaitingFirstChunk = false;
-        _mensajes[aiIndex] =
-            ChatMessage(text: "Error al generar script: $e", isUser: false);
+        _mensajes[aiIndex] = ChatMessage(text: errorText, isUser: false);
       });
     } finally {
       if (mounted) setState(() => _isSending = false);
@@ -133,34 +151,29 @@ class _ChatIaTabState extends State<ChatIaTab> {
       barrierDismissible: false,
       builder: (context) => AlertDialog(
         backgroundColor: AppColors.surface,
-        title: const Text("Script Generado",
-            style: TextStyle(color: AppColors.textPrimary)),
+        title: const Text("Script Generado", style: TextStyle(color: AppColors.textPrimary)),
         content: SingleChildScrollView(
           child: Container(
             padding: const EdgeInsets.all(12.0),
             color: Colors.black54,
             child: Text(
               scriptCode,
-              style: const TextStyle(
-                  color: Colors.greenAccent,
-                  fontFamily: 'monospace',
-                  fontSize: 12),
+              style: const TextStyle(color: Colors.greenAccent, fontFamily: 'monospace', fontSize: 12),
             ),
           ),
         ),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text("Cancelar",
-                  style: TextStyle(color: Colors.redAccent))),
+              child: const Text("Cancelar", style: TextStyle(color: Colors.redAccent))
+          ),
           ElevatedButton.icon(
             style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
             icon: const Icon(Icons.play_arrow, color: Colors.white),
-            label: const Text("Ejecutar en Servidor",
-                style: TextStyle(color: Colors.white)),
+            label: const Text("Ejecutar en Servidor", style: TextStyle(color: Colors.white)),
             onPressed: () {
               Navigator.pop(context);
-              _executeScriptOnServer(scriptCode);
+              _showPasswordDialogAndExecute(scriptCode); // ¡Llamamos al diálogo de contraseña!
             },
           )
         ],
@@ -168,57 +181,115 @@ class _ChatIaTabState extends State<ChatIaTab> {
     );
   }
 
-  Future<void> _executeScriptOnServer(String scriptCode) async {
-    if (widget.activeServer?.sshService == null ||
-        widget.activeServer!.sshService.sftp == null) {
-      _addSystemMessage("Error: No hay conexión SSH/SFTP activa con el servidor.");
+  // --- NUEVO: Petición de contraseña ---
+  void _showPasswordDialogAndExecute(String scriptCode) {
+    final TextEditingController pwdController = TextEditingController();
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        title: const Text("Autenticación Sudo", style: TextStyle(color: AppColors.textPrimary)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text("Se requieren permisos para ejecutar este script. Ingresa tu contraseña:",
+                style: TextStyle(color: AppColors.textMuted)),
+            const SizedBox(height: 12),
+            TextField(
+              controller: pwdController,
+              obscureText: true,
+              style: const TextStyle(color: AppColors.textPrimary),
+              decoration: InputDecoration(
+                hintText: "Contraseña",
+                hintStyle: const TextStyle(color: AppColors.textMuted),
+                filled: true,
+                fillColor: AppColors.surfaceHighlight,
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Cancelar", style: TextStyle(color: Colors.redAccent)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
+            onPressed: () {
+              final password = pwdController.text;
+              Navigator.pop(context);
+              _executeScriptOnServer(scriptCode, password); // Mandamos script + password
+            },
+            child: const Text("Ejecutar", style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _executeScriptOnServer(String scriptCode, String password) async {
+    if (widget.activeServer?.sshService == null || widget.activeServer!.sshService.sftp == null) {
+      await _addSystemMessage("Error: No hay conexión SSH/SFTP activa con el servidor.");
       return;
     }
 
     setState(() => _isSending = true);
-    _addSystemMessage("Iniciando despliegue y ejecución del script en /tmp/scripts...");
+    await _addSystemMessage("Iniciando despliegue y ejecución del script en /tmp/scripts...");
 
     try {
       final sftp = widget.activeServer!.sshService.sftp!;
       final ssh = widget.activeServer!.sshService;
 
-      // Crear carpeta /tmp/scripts (ignorar si ya existe)
-      try {
-        await sftp.createDirectory("/tmp/scripts");
-      } catch (_) {}
+      // ¡CORRECCIÓN AQUÍ! Creamos la carpeta usando SSH, es inmune a bloqueos.
+      await ssh.runSingleCommand("mkdir -p /tmp/scripts");
 
-      // Guardar archivo temporal en el dispositivo
+      // Guardamos el archivo localmente
       final tempDir = await getTemporaryDirectory();
       final fileName = "auto_${DateTime.now().millisecondsSinceEpoch}.sh";
       final tempFile = File('${tempDir.path}/$fileName');
       await tempFile.writeAsString(scriptCode);
 
-      // ¡CORREGIDO! Subir archivo usando SFTP a /tmp/scripts
+      // Subimos por SFTP
       final remotePath = "/tmp/scripts/$fileName";
       await sftp.uploadFile(tempFile.path, remotePath);
 
-      // ¡CORREGIDO! Dar permisos, limpiar retornos de carro (sed) y ejecutar con SSHService
-      final comandoEjecucion = "sed -i 's/\\r\$//' $remotePath && chmod +x $remotePath && $remotePath";
-      final resultado = await ssh.runSingleCommand(comandoEjecucion);
+      // Damos permisos de ejecución y quitamos retornos de carro de Windows (\r)
+      await ssh.runSingleCommand("sed -i 's/\\r\$//' $remotePath && chmod +x $remotePath");
 
-      _addSystemMessage(
-          " Ejecucion Finalizada.\n\nSalida del terminal:\n```text\n$resultado\n```");
-          
-      // Opcional: Borramos el archivo temporal del celular para no llenarle la memoria
+      // Ejecutamos con la nueva función a prueba de fallos
+      final resultado = await ssh.runSudoCommand(remotePath, password);
+
+      await _addSystemMessage("Ejecución Finalizada.\n\nSalida del terminal:\n```text\n$resultado\n```");
+
+      // Limpiamos el archivo local
       if (await tempFile.exists()) {
         await tempFile.delete();
       }
-
     } catch (e) {
-      _addSystemMessage(" Fallo critico durante el despliegue: $e");
+      await _addSystemMessage("Error durante la ejecución del script:\n$e");
     } finally {
       if (mounted) setState(() => _isSending = false);
     }
   }
 
-  void _addSystemMessage(String text) {
-    setState(() => _mensajes.add(ChatMessage(text: text, isUser: false)));
-    _scrollToBottom();
+  // --- Refactorizado para que guarde en el historial siempre ---
+  Future<void> _addSystemMessage(String text) async {
+    await _historyRepo.saveMessage(ChatMessageEntity(
+      serverIp: widget.serverIp,
+      profileId: widget.profileId,
+      role: 'assistant',
+      content: text,
+      timestamp: DateTime.now(),
+    ));
+
+    if (mounted) {
+      setState(() {
+        _mensajes.add(ChatMessage(text: text, isUser: false));
+      });
+      _scrollToBottom();
+    }
   }
 
   // ================= CHAT NORMAL (original) =================

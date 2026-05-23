@@ -43,18 +43,12 @@ Future<void> setupDependencies(Isar isar) async {
 
   // 3. Repositorios
   getIt.registerLazySingleton<FlutterSecureStorage>(() => const FlutterSecureStorage());
-  getIt.registerLazySingleton<AiConfigRepository>(() => AiConfigRepository(
-    aiConfigDAO,
-    getIt<FlutterSecureStorage>(),
-  ));
   getIt.registerLazySingleton<ProfileRepository>(() => ProfileRepository(getIt<AuthService>()));
   getIt.registerLazySingleton<ServerRepository>(() => ServerRepository(serverConfigDAO));
   getIt.registerLazySingleton<TempSessionRepository>(() => TempSessionRepository());
 
   // 3.1 Servicio IA
-  getIt.registerLazySingleton<IAService>(() => IAService(
-    getIt<AiConfigRepository>(),
-  ));
+  getIt.registerLazySingleton<IAService>(() => IAService());
 
   // 4. Managers
   getIt.registerLazySingleton<CommandHistoryManager>(() => CommandHistoryManager());
