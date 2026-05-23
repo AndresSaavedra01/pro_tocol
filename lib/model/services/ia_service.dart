@@ -93,4 +93,63 @@ class IAService {
       'llama-3.1-8b-instant',
     ];
   }
+  Future<String> generarScript(String prompt) async {
+    // Inyectamos la instrucción requerida al prompt
+    final String promptConContexto = "$prompt\n\n[IMPORTANTE: El script se guardará y ejecutará desde el directorio '/scripts' en el servidor. Adapta cualquier ruta relativa a este hecho.]";
+
+    final url = Uri.parse('$_baseUrl/generar-script/');
+    final request = http.Request('POST', url)
+      ..headers.addAll({
+        'Content-Type': 'application/json',
+        'X-API-Key': _apiKey,
+      })
+      ..body = jsonEncode({
+        'historial': [
+          {'role': 'user', 'content': promptConContexto}
+        ],
+        'modelo': 'llama-3.3-70b-versatile',
+      });
+
+    final client = http.Client();
+
+    try {
+      final response = await client.send(request).timeout(
+        const Duration(seconds: 20),
+        onTimeout: () => throw TimeoutException('El servidor no respondió al generar el script.'),
+      );
+
+      if (response.statusCode == 403) {
+        throw Exception('Error de autenticación: API Key inválida.');
+      }
+      if (response.statusCode != 200) {
+        throw HttpException('Error del servidor: ${response.statusCode}');
+      }
+
+      final stream = response.stream
+          .transform(utf8.decoder)
+          .transform(const LineSplitter());
+          
+      StringBuffer scriptCompleto = StringBuffer();
+
+      await for (final line in stream) {
+        if (line.isEmpty) continue;
+        try {
+          final jsonResponse = jsonDecode(line);
+          if (jsonResponse.containsKey('respuesta')) {
+            scriptCompleto.write(jsonResponse['respuesta']);
+          } else if (jsonResponse.containsKey('error')) {
+            throw Exception(jsonResponse['error']);
+          }
+        } catch (e) {
+          // Ignoramos parsing en fragmentos incompletos
+          continue;
+        }
+      }
+      return scriptCompleto.toString().trim();
+    } on SocketException {
+      throw Exception('Error de conexión al servidor en la nube.');
+    } finally {
+      client.close();
+    }
+  }
 }

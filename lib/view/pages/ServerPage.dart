@@ -88,6 +88,7 @@ class _ServerPageState extends State<ServerPage> {
                   child: ChatIaTab(
                     serverIp: widget.serverConfig.host,
                     profileId: widget.serverConfig.profileId,
+                    activeServer: _activeServer,
                   ), 
                 ),
               ],
