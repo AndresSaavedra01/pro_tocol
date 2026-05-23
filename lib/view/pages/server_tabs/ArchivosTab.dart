@@ -45,6 +45,11 @@ class _ArchivosTabState extends State<ArchivosTab> {
     super.dispose();
   }
 
+  // Función auxiliar para normalizar rutas y evitar el doble "/" (ej: //carpeta)
+  String _normalizePath(String path) {
+    return path.replaceAll(RegExp(r'/{2,}'), '/');
+  }
+
   // --- NAVEGACIÓN Y CARGA DE DATOS ---
 
   void _changePath(String newPath) {
@@ -52,8 +57,8 @@ class _ArchivosTabState extends State<ArchivosTab> {
     if (!newPath.startsWith("/")) newPath = "/$newPath"; // Asegurar ruta absoluta
 
     setState(() {
-      currentPath = newPath;
-      _pathController.text = newPath; // Sincroniza la barra de navegación
+      currentPath = _normalizePath(newPath);
+      _pathController.text = currentPath; // Sincroniza la barra de navegación
     });
     _refreshFiles();
   }
@@ -67,7 +72,7 @@ class _ArchivosTabState extends State<ArchivosTab> {
     } catch (e) {
       if (mounted) {
         setState(() => _isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error al cargar: $e'), backgroundColor: Colors.red));
       }
     }
   }
@@ -92,11 +97,16 @@ class _ArchivosTabState extends State<ArchivosTab> {
       setState(() => _isLoading = true);
       final localPath = result.files.single.path!;
       final fileName = result.files.single.name;
-      await widget.activeServer!.sshService.sftp!.uploadFile(
-          localPath,
-          "$currentPath/$fileName"
-      );
-      _refreshFiles();
+      
+      try {
+        final remotePath = _normalizePath("$currentPath/$fileName");
+        await widget.activeServer!.sshService.sftp!.uploadFile(localPath, remotePath);
+        await _refreshFiles();
+      } catch (e) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error al subir archivo: $e"), backgroundColor: Colors.red));
+      } finally {
+        if (mounted) setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -104,18 +114,25 @@ class _ArchivosTabState extends State<ArchivosTab> {
     String? directoryPath = await FilePicker.platform.getDirectoryPath();
     if (directoryPath != null) {
       setState(() => _isLoading = true);
-      final dir = Directory(directoryPath);
-      final folderName = dir.uri.pathSegments.where((s) => s.isNotEmpty).last;
+      try {
+        final dir = Directory(directoryPath);
+        final folderName = dir.uri.pathSegments.where((s) => s.isNotEmpty).last;
 
-      final remotePath = "$currentPath/$folderName";
-      await widget.activeServer!.sshService.sftp!.createDirectory(remotePath);
+        final remoteFolder = _normalizePath("$currentPath/$folderName");
+        await widget.activeServer!.sshService.sftp!.createDirectory(remoteFolder);
 
-      final files = dir.listSync().whereType<File>();
-      for (var file in files) {
-        final fileName = file.uri.pathSegments.last;
-        await widget.activeServer!.sshService.sftp!.uploadFile(file.path, "$remotePath/$fileName");
+        final files = dir.listSync().whereType<File>();
+        for (var file in files) {
+          final fileName = file.uri.pathSegments.last;
+          final remoteFilePath = _normalizePath("$remoteFolder/$fileName");
+          await widget.activeServer!.sshService.sftp!.uploadFile(file.path, remoteFilePath);
+        }
+        await _refreshFiles();
+      } catch (e) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error al subir carpeta: $e"), backgroundColor: Colors.red));
+      } finally {
+        if (mounted) setState(() => _isLoading = false);
       }
-      _refreshFiles();
     }
   }
 
@@ -130,22 +147,26 @@ class _ArchivosTabState extends State<ArchivosTab> {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Descargado en:\n${file.path}")));
       }
     } catch(e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error descargando: $e")));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error descargando: $e"), backgroundColor: Colors.red));
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
   Future<void> _pasteFile() async {
     if (_clipboardNode == null) return;
     setState(() => _isLoading = true);
-    final newPath = "$currentPath/${_clipboardNode!.name}";
-    await widget.activeServer!.sshService.sftp!.rename(_clipboardNode!.path, newPath);
-    setState(() { _clipboardNode = null; _isCut = false; });
-    _refreshFiles();
+    try {
+      final newPath = _normalizePath("$currentPath/${_clipboardNode!.name}");
+      await widget.activeServer!.sshService.sftp!.rename(_clipboardNode!.path, newPath);
+      setState(() { _clipboardNode = null; _isCut = false; });
+      await _refreshFiles();
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error al pegar: $e"), backgroundColor: Colors.red));
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
   }
-
-  // --- DIÁLOGOS (CREAR Y RENOMBRAR) ---
 
   void _showCreateFolderDialog() {
     final controller = TextEditingController();
@@ -161,8 +182,16 @@ class _ArchivosTabState extends State<ArchivosTab> {
                 if (controller.text.isNotEmpty) {
                   Navigator.pop(context);
                   setState(() => _isLoading = true);
-                  await widget.activeServer!.sshService.sftp!.createDirectory("$currentPath/${controller.text}");
-                  _refreshFiles();
+                  
+                  try {
+                    final remotePath = _normalizePath("$currentPath/${controller.text}");
+                    await widget.activeServer!.sshService.sftp!.createDirectory(remotePath);
+                    await _refreshFiles();
+                  } catch (e) {
+                    if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error al crear carpeta: $e"), backgroundColor: Colors.red));
+                  } finally {
+                    if (mounted) setState(() => _isLoading = false);
+                  }
                 }
               },
               child: const Text("Crear")
@@ -186,8 +215,16 @@ class _ArchivosTabState extends State<ArchivosTab> {
                 if (controller.text.isNotEmpty) {
                   Navigator.pop(context);
                   setState(() => _isLoading = true);
-                  await widget.activeServer!.sshService.sftp!.createEmptyFile("$currentPath/${controller.text}");
-                  _refreshFiles();
+                  
+                  try {
+                    final remotePath = _normalizePath("$currentPath/${controller.text}");
+                    await widget.activeServer!.sshService.sftp!.createEmptyFile(remotePath);
+                    await _refreshFiles();
+                  } catch (e) {
+                    if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error al crear archivo: $e"), backgroundColor: Colors.red));
+                  } finally {
+                    if (mounted) setState(() => _isLoading = false);
+                  }
                 }
               },
               child: const Text("Crear")
@@ -212,11 +249,17 @@ class _ArchivosTabState extends State<ArchivosTab> {
                   Navigator.pop(context);
                   setState(() => _isLoading = true);
 
-                  final String parentPath = node.path.substring(0, node.path.lastIndexOf('/'));
-                  final String newPath = parentPath.isEmpty ? "/${controller.text}" : "$parentPath/${controller.text}";
+                  try {
+                    final String parentPath = node.path.substring(0, node.path.lastIndexOf('/'));
+                    final String newPath = _normalizePath(parentPath.isEmpty ? "/${controller.text}" : "$parentPath/${controller.text}");
 
-                  await widget.activeServer!.sshService.sftp!.rename(node.path, newPath);
-                  _refreshFiles();
+                    await widget.activeServer!.sshService.sftp!.rename(node.path, newPath);
+                    await _refreshFiles();
+                  } catch (e) {
+                    if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error al renombrar: $e"), backgroundColor: Colors.red));
+                  } finally {
+                    if (mounted) setState(() => _isLoading = false);
+                  }
                 }
               },
               child: const Text("Guardar")
@@ -236,27 +279,35 @@ class _ArchivosTabState extends State<ArchivosTab> {
       builder: (context) => SafeArea(
         child: Wrap(
           children: [
+            const Padding(
+              padding: EdgeInsets.all(16.0),
+              child: Text("Transferencias y Creacion", style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.textMuted)),
+            ),
             ListTile(
               leading: const Icon(Icons.upload_file, color: Colors.blueAccent),
-              title: const Text('Subir Archivo', style: TextStyle(color: AppColors.textPrimary)),
+              title: const Text('Subir Archivo Local', style: TextStyle(color: AppColors.textPrimary)),
               onTap: () { Navigator.pop(context); _handleUpload(); },
             ),
             ListTile(
               leading: const Icon(Icons.drive_folder_upload, color: Colors.green),
-              title: const Text('Subir Carpeta', style: TextStyle(color: AppColors.textPrimary)),
+              title: const Text('Subir Carpeta Local', style: TextStyle(color: AppColors.textPrimary)),
               onTap: () { Navigator.pop(context); _handleUploadFolder(); },
             ),
             const Divider(color: AppColors.border),
             ListTile(
               leading: const Icon(Icons.note_add, color: AppColors.textPrimary),
-              title: const Text('Nuevo Archivo', style: TextStyle(color: AppColors.textPrimary)),
+              title: const Text('Crear Archivo Vacio', style: TextStyle(color: AppColors.textPrimary)),
               onTap: () { Navigator.pop(context); _showCreateFileDialog(); },
             ),
             ListTile(
               leading: const Icon(Icons.create_new_folder, color: AppColors.textPrimary),
-              title: const Text('Nueva Carpeta', style: TextStyle(color: AppColors.textPrimary)),
+              title: const Text('Crear Carpeta', style: TextStyle(color: AppColors.textPrimary)),
               onTap: () { Navigator.pop(context); _showCreateFolderDialog(); },
             ),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+              child: Text("Para descargar, manten presionado un archivo de la lista.", style: TextStyle(color: AppColors.textMuted, fontSize: 12, fontStyle: FontStyle.italic)),
+            )
           ],
         ),
       ),
@@ -276,8 +327,8 @@ class _ArchivosTabState extends State<ArchivosTab> {
               child: Text(node.name, style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.textMuted)),
             ),
             ListTile(
-              leading: const Icon(Icons.download, color: AppColors.textPrimary),
-              title: const Text('Descargar', style: TextStyle(color: AppColors.textPrimary)),
+              leading: const Icon(Icons.download, color: Colors.blueAccent),
+              title: const Text('Descargar a mi dispositivo', style: TextStyle(color: AppColors.textPrimary)),
               onTap: () { Navigator.pop(context); _handleDownload(node); },
             ),
             ListTile(
@@ -299,8 +350,14 @@ class _ArchivosTabState extends State<ArchivosTab> {
               onTap: () async {
                 Navigator.pop(context);
                 setState(() => _isLoading = true);
-                await widget.activeServer!.sshService.sftp!.remove(node);
-                _refreshFiles();
+                try {
+                  await widget.activeServer!.sshService.sftp!.remove(node);
+                  await _refreshFiles();
+                } catch (e) {
+                  if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error al eliminar: $e'), backgroundColor: Colors.red));
+                } finally {
+                  if (mounted) setState(() => _isLoading = false);
+                }
               },
             ),
           ],
@@ -401,27 +458,32 @@ class _ArchivosTabState extends State<ArchivosTab> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.transparent,
-      floatingActionButton: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Solo muestra el botón Pegar si copiaste algo antes
-          if (_clipboardNode != null)
-            FloatingActionButton.small(
-              heroTag: "paste",
-              backgroundColor: Colors.orange,
-              onPressed: _pasteFile,
-              child: const Icon(Icons.paste),
-            ),
-          const SizedBox(height: 8),
+      floatingActionButton: Padding(
+        padding: const EdgeInsets.only(bottom: 80.0), 
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            // Solo muestra el botón Pegar si copiaste algo antes
+            if (_clipboardNode != null) ...[
+              FloatingActionButton.small(
+                heroTag: "paste",
+                backgroundColor: Colors.orange,
+                onPressed: _pasteFile,
+                child: const Icon(Icons.paste, color: Colors.white),
+              ),
+              const SizedBox(height: 12),
+            ],
 
-          // Botón '+' Principal
-          FloatingActionButton(
-            heroTag: "add_menu",
-            backgroundColor: AppColors.primary,
-            onPressed: _showAddMenu,
-            child: const Icon(Icons.add),
-          ),
-        ],
+            // Botón de Transferencias unificado (Subir/Crear)
+            FloatingActionButton(
+              heroTag: "transfer_menu",
+              backgroundColor: AppColors.primary,
+              onPressed: _showAddMenu,
+              child: const Icon(Icons.sync, color: Colors.white), 
+            ),
+          ],
+        ),
       ),
       body: Column(
         children: [
@@ -432,7 +494,7 @@ class _ArchivosTabState extends State<ArchivosTab> {
                 : RefreshIndicator(
               onRefresh: _refreshFiles,
               child: ListView.builder(
-                padding: const EdgeInsets.only(bottom: 100), // Previene que el FAB tape el final
+                padding: const EdgeInsets.only(bottom: 160), // Previene que ambos FABs tapen el final de la lista
                 itemCount: currentFiles.length,
                 itemBuilder: (context, i) => _buildFileItem(currentFiles[i]),
               ),
