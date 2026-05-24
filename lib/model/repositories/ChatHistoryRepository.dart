@@ -23,4 +23,33 @@ class ChatHistoryRepository {
         .sortByTimestamp()
         .findAll();
   }
+
+  Future<void> deleteMessage(int id) async {
+    await isar.writeTxn(() async {
+      await isar.chatMessageEntitys.delete(id);
+    });
+  }
+
+  Future<void> deleteAllByServerAndProfile(String ip, String profileId) async {
+    await isar.writeTxn(() async {
+      final messages = await isar.chatMessageEntitys
+          .filter()
+          .serverIpEqualTo(ip)
+          .and()
+          .profileIdEqualTo(profileId)
+          .findAll();
+      if (messages.isEmpty) return;
+      final ids = messages.map((e) => e.id).toList();
+      await isar.chatMessageEntitys.deleteAll(ids);
+    });
+  }
+
+  Future<void> updateMessageContent(int id, String newContent) async {
+    await isar.writeTxn(() async {
+      final message = await isar.chatMessageEntitys.get(id);
+      if (message == null) return;
+      message.editedContent = newContent;
+      await isar.chatMessageEntitys.put(message);
+    });
+  }
 }
