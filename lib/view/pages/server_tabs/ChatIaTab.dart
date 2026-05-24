@@ -209,7 +209,7 @@ class _ChatIaTabState extends State<ChatIaTab> {
         content: SingleChildScrollView(
           child: Container(
             padding: const EdgeInsets.all(12.0),
-            color: Colors.white,
+            color: Colors.black54,
             child: Text(
               scriptCode,
               style: const TextStyle(color: Colors.greenAccent, fontFamily: 'monospace', fontSize: 12),
