@@ -22,23 +22,28 @@ const ChatMessageEntitySchema = CollectionSchema(
       name: r'content',
       type: IsarType.string,
     ),
-    r'profileId': PropertySchema(
+    r'editedContent': PropertySchema(
       id: 1,
+      name: r'editedContent',
+      type: IsarType.string,
+    ),
+    r'profileId': PropertySchema(
+      id: 2,
       name: r'profileId',
       type: IsarType.string,
     ),
     r'role': PropertySchema(
-      id: 2,
+      id: 3,
       name: r'role',
       type: IsarType.string,
     ),
     r'serverIp': PropertySchema(
-      id: 3,
+      id: 4,
       name: r'serverIp',
       type: IsarType.string,
     ),
     r'timestamp': PropertySchema(
-      id: 4,
+      id: 5,
       name: r'timestamp',
       type: IsarType.dateTime,
     )
@@ -64,6 +69,12 @@ int _chatMessageEntityEstimateSize(
 ) {
   var bytesCount = offsets.last;
   bytesCount += 3 + object.content.length * 3;
+  {
+    final value = object.editedContent;
+    if (value != null) {
+      bytesCount += 3 + value.length * 3;
+    }
+  }
   bytesCount += 3 + object.profileId.length * 3;
   bytesCount += 3 + object.role.length * 3;
   bytesCount += 3 + object.serverIp.length * 3;
@@ -77,10 +88,11 @@ void _chatMessageEntitySerialize(
   Map<Type, List<int>> allOffsets,
 ) {
   writer.writeString(offsets[0], object.content);
-  writer.writeString(offsets[1], object.profileId);
-  writer.writeString(offsets[2], object.role);
-  writer.writeString(offsets[3], object.serverIp);
-  writer.writeDateTime(offsets[4], object.timestamp);
+  writer.writeString(offsets[1], object.editedContent);
+  writer.writeString(offsets[2], object.profileId);
+  writer.writeString(offsets[3], object.role);
+  writer.writeString(offsets[4], object.serverIp);
+  writer.writeDateTime(offsets[5], object.timestamp);
 }
 
 ChatMessageEntity _chatMessageEntityDeserialize(
@@ -91,11 +103,12 @@ ChatMessageEntity _chatMessageEntityDeserialize(
 ) {
   final object = ChatMessageEntity(
     content: reader.readString(offsets[0]),
-    profileId: reader.readString(offsets[1]),
-    role: reader.readString(offsets[2]),
-    serverIp: reader.readString(offsets[3]),
-    timestamp: reader.readDateTime(offsets[4]),
+    profileId: reader.readString(offsets[2]),
+    role: reader.readString(offsets[3]),
+    serverIp: reader.readString(offsets[4]),
+    timestamp: reader.readDateTime(offsets[5]),
   );
+  object.editedContent = reader.readStringOrNull(offsets[1]);
   object.id = id;
   return object;
 }
@@ -110,12 +123,14 @@ P _chatMessageEntityDeserializeProp<P>(
     case 0:
       return (reader.readString(offset)) as P;
     case 1:
-      return (reader.readString(offset)) as P;
+      return (reader.readStringOrNull(offset)) as P;
     case 2:
       return (reader.readString(offset)) as P;
     case 3:
       return (reader.readString(offset)) as P;
     case 4:
+      return (reader.readString(offset)) as P;
+    case 5:
       return (reader.readDateTime(offset)) as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
@@ -349,6 +364,160 @@ extension ChatMessageEntityQueryFilter
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.greaterThan(
         property: r'content',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterFilterCondition>
+      editedContentIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNull(
+        property: r'editedContent',
+      ));
+    });
+  }
+
+  QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterFilterCondition>
+      editedContentIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNotNull(
+        property: r'editedContent',
+      ));
+    });
+  }
+
+  QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterFilterCondition>
+      editedContentEqualTo(
+    String? value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'editedContent',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterFilterCondition>
+      editedContentGreaterThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'editedContent',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterFilterCondition>
+      editedContentLessThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'editedContent',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterFilterCondition>
+      editedContentBetween(
+    String? lower,
+    String? upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'editedContent',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterFilterCondition>
+      editedContentStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'editedContent',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterFilterCondition>
+      editedContentEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'editedContent',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterFilterCondition>
+      editedContentContains(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'editedContent',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterFilterCondition>
+      editedContentMatches(String pattern, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'editedContent',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterFilterCondition>
+      editedContentIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'editedContent',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterFilterCondition>
+      editedContentIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'editedContent',
         value: '',
       ));
     });
@@ -898,6 +1067,20 @@ extension ChatMessageEntityQuerySortBy
   }
 
   QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterSortBy>
+      sortByEditedContent() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'editedContent', Sort.asc);
+    });
+  }
+
+  QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterSortBy>
+      sortByEditedContentDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'editedContent', Sort.desc);
+    });
+  }
+
+  QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterSortBy>
       sortByProfileId() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'profileId', Sort.asc);
@@ -967,6 +1150,20 @@ extension ChatMessageEntityQuerySortThenBy
       thenByContentDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'content', Sort.desc);
+    });
+  }
+
+  QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterSortBy>
+      thenByEditedContent() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'editedContent', Sort.asc);
+    });
+  }
+
+  QueryBuilder<ChatMessageEntity, ChatMessageEntity, QAfterSortBy>
+      thenByEditedContentDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'editedContent', Sort.desc);
     });
   }
 
@@ -1050,6 +1247,14 @@ extension ChatMessageEntityQueryWhereDistinct
   }
 
   QueryBuilder<ChatMessageEntity, ChatMessageEntity, QDistinct>
+      distinctByEditedContent({bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'editedContent',
+          caseSensitive: caseSensitive);
+    });
+  }
+
+  QueryBuilder<ChatMessageEntity, ChatMessageEntity, QDistinct>
       distinctByProfileId({bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'profileId', caseSensitive: caseSensitive);
@@ -1089,6 +1294,13 @@ extension ChatMessageEntityQueryProperty
   QueryBuilder<ChatMessageEntity, String, QQueryOperations> contentProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'content');
+    });
+  }
+
+  QueryBuilder<ChatMessageEntity, String?, QQueryOperations>
+      editedContentProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'editedContent');
     });
   }
 
