@@ -2,12 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart'; // NUEVO: Importamos go_router
 
 import 'package:pro_tocol/model/entities/DataBaseEntities.dart';
+import 'package:pro_tocol/model/entities/Profile.dart';
+import 'package:pro_tocol/model/repositories/ServerRepository.dart';
 
 import 'package:pro_tocol/view/components/connection_dialog.dart';
 import 'package:pro_tocol/view/components/custom_sidebar.dart';
+import 'package:pro_tocol/view/pages/server_tabs/UserProfileTab.dart';
 
 import '../../controller/ServerConnectionController.dart';
 import '../../controller/TempSessionController.dart';
+import '../../controller/ProfileController.dart';
 import '../../injection.dart';
 import '../../model/entities/TempSessionConfig.dart';
 import '../theme/AppColors.dart';
@@ -15,7 +19,7 @@ import 'ServerPage.dart';
 import 'TempSessionPage.dart';
 import 'DistroLogsPage.dart';
 
-enum ViewType { home, serverView, tempSessionView, loading, distroLogs }
+enum ViewType { home, serverView, tempSessionView, loading, distroLogs, profileSettings }
 
 class WorkspacePage extends StatefulWidget {
   final Profile profile;
@@ -27,6 +31,7 @@ class WorkspacePage extends StatefulWidget {
 
   ServerConnectionController get _connectionController => getIt<ServerConnectionController>();
   TempSessionController get _tempSessionController => getIt<TempSessionController>();
+  ServerRepository get _serverRepository => getIt<ServerRepository>();
 
   @override
   State<WorkspacePage> createState() => _WorkspacePageState();
@@ -39,6 +44,7 @@ class _WorkspacePageState extends State<WorkspacePage> {
   ServerConfig? _selectedServer;
   TempSessionConfig? _selectedTempSession;
   final List<TempSessionConfig> _tempConfigs = [];
+  List<ServerConfig> _servers = [];
 
   @override
   void initState() {
@@ -47,8 +53,16 @@ class _WorkspacePageState extends State<WorkspacePage> {
   }
 
   Future<void> _refreshServers() async {
-    await widget.profile.servers.load();
-    if (mounted) setState(() {});
+    try {
+      final servers = await widget._serverRepository.getServersByProfileId(widget.profile.id);
+      if (mounted) {
+        setState(() {
+          _servers = servers;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error cargando servidores: $e');
+    }
   }
 
   void _goHome() {
@@ -115,7 +129,7 @@ class _WorkspacePageState extends State<WorkspacePage> {
     return Scaffold(
       backgroundColor: AppColors.background,
       drawer: CustomSidebar(
-        servers: widget.profile.servers.toList(),
+        servers: _servers,
         tempSessions: _tempConfigs.map((c) => ServerConfig()
           ..host = c.host
           ..username = c.username
@@ -178,7 +192,12 @@ class _WorkspacePageState extends State<WorkspacePage> {
           ),
           IconButton(
             icon: const Icon(Icons.arrow_back, size: 20),
-            onPressed: () => context.pop(), // REFACTORIZADO
+            onPressed: () async {
+              await getIt<ProfileController>().signOut();
+              if (context.mounted) {
+                context.go('/');
+              }
+            },
           )
         ],
       ),
@@ -195,10 +214,10 @@ class _WorkspacePageState extends State<WorkspacePage> {
         type: BottomNavigationBarType.fixed,
         selectedItemColor: AppColors.primary,
         unselectedItemColor: AppColors.textMuted,
-        onTap: (index) {
+        onTap: (index) async {
           if (index == 0) _goHome();
           if (index == 1) setState(() => _currentView = ViewType.distroLogs);
-          if (index == 2) context.pop(); // REFACTORIZADO
+          if (index == 2) setState(() => _currentView = ViewType.profileSettings); 
         },
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.home_outlined), label: 'Inicio'),
@@ -230,6 +249,8 @@ class _WorkspacePageState extends State<WorkspacePage> {
           activeServer: _selectedServer != null ? widget._connectionController.getActiveServer(_selectedServer!.id) : null,
           activeSession: _selectedTempSession != null ? widget._tempSessionController.getValidSession(_selectedTempSession!.host) : null,
         );
+      case ViewType.profileSettings:
+        return UserProfileTab(profile: widget.profile);
       case ViewType.home:
       default:
         return _buildWelcomeView();
@@ -241,6 +262,7 @@ class _WorkspacePageState extends State<WorkspacePage> {
     if (_currentView == ViewType.tempSessionView) return "Terminal";
     if (_currentView == ViewType.loading) return "Conectando...";
     if (_currentView == ViewType.distroLogs) return "Distro & Logs";
+    if (_currentView == ViewType.profileSettings) return "Mi Perfil";
     return "Inicio";
   }
 

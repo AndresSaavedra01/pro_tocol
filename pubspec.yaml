@@ -49,6 +49,7 @@ dependencies:
   get_it: ^9.2.1
   flutter_markdown: ^0.7.1  # Para los bloques de comandos
   flutter_highlight: ^0.7.0 # Opcional: para mejor resaltado de sintaxis
+  supabase_flutter: ^2.12.4
 
 dev_dependencies:
   flutter_test:

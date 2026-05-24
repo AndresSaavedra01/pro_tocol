@@ -13,11 +13,13 @@ class ChatHistoryRepository {
     });
   }
 
-  // Cargar historial por IP
-  Future<List<ChatMessageEntity>> getMessagesByServer(String ip) async {
+  // Cargar historial por IP y Perfil
+  Future<List<ChatMessageEntity>> getMessagesByServerAndProfile(String ip, String profileId) async {
     return await isar.chatMessageEntitys
         .filter()
         .serverIpEqualTo(ip)
+        .and()
+        .profileIdEqualTo(profileId)
         .sortByTimestamp()
         .findAll();
   }

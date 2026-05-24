@@ -1,21 +1,13 @@
-
 import 'package:isar/isar.dart';
 import 'package:pro_tocol/model/entities/GeneralConfig.dart';
 
 part 'DataBaseEntities.g.dart';
 
 @Collection()
-class Profile {
-  Id id = Isar.autoIncrement;
-
-  late String profileName;
-
-  final servers = IsarLinks<ServerConfig>();
-}
-
-@Collection()
 class ServerConfig implements GeneralConfig {
   Id id = Isar.autoIncrement;
+
+  late String profileId; // UID del usuario en Supabase
 
   @override
   late String host;
@@ -27,9 +19,6 @@ class ServerConfig implements GeneralConfig {
   String? password;
   @override
   String? keyPairId;
-
-  @Backlink(to: 'servers')
-  final profile = IsarLink<Profile>();
 }
 
 @Collection()

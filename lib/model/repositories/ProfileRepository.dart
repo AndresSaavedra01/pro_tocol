@@ -1,30 +1,42 @@
-
-import 'package:isar/isar.dart';
-import 'package:pro_tocol/model/daos/ProfileDAO.dart';
-import 'package:pro_tocol/model/entities/DataBaseEntities.dart';
+import 'package:pro_tocol/model/entities/Profile.dart';
+import 'package:pro_tocol/model/services/AuthService.dart';
 
 class ProfileRepository {
-  final ProfileDAO _profileDAO;
+  final AuthService _authService;
 
-  ProfileRepository(this._profileDAO);
+  ProfileRepository(this._authService);
 
-  Future<void> saveProfile(Profile profile) async {
-    await _profileDAO.saveProfile(profile);
+  Future<Profile> signUp({
+    required String email,
+    required String password,
+    required String profileName,
+  }) async {
+    return await _authService.signUp(
+      email: email,
+      password: password,
+      profileName: profileName,
+    );
   }
 
-  Future<List<Profile>> getAllProfiles() async {
-    return await _profileDAO.getAllProfiles();
+  Future<Profile> signIn({
+    required String email,
+    required String password,
+  }) async {
+    return await _authService.signIn(
+      email: email,
+      password: password,
+    );
   }
 
-  Future<Profile?> getProfileById(Id id) async {
-    return await _profileDAO.getProfileById(id);
+  Future<void> signOut() async {
+    await _authService.signOut();
   }
 
-  Future<bool> deleteProfile(Id id) async {
-    return await _profileDAO.deleteProfile(id);
+  Future<Profile?> getCurrentProfile() async {
+    return await _authService.getCurrentProfile();
   }
 
-  Future<void> addServerToProfile(Id profileId, ServerConfig server) async {
-    await _profileDAO.addServerToProfile(profileId, server);
-  }
+  bool get isLoggedIn => _authService.isLoggedIn;
+
+  Stream<dynamic> get onAuthStateChange => _authService.onAuthStateChange;
 }

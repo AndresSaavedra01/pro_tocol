@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:isar/isar.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 // --- Entidades ---
 import 'package:pro_tocol/model/entities/DataBaseEntities.dart';
@@ -10,15 +11,21 @@ import 'package:pro_tocol/model/entities/chat_message_entity.dart';
 import 'package:pro_tocol/view/router/AppRouter.dart';
 
 // --- Inyección de Dependencias ---
-import 'injection.dart'; // Asegúrate de importar el archivo que acabamos de crear
+import 'injection.dart';
 
 void main() async {
   // 1. Inicialización básica
   WidgetsFlutterBinding.ensureInitialized();
 
+  // Inicializar Supabase Auth
+  await Supabase.initialize(
+    url: 'https://syfjxpeaqpdelyyueise.supabase.co',
+    anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN5Zmp4cGVhcXBkZWx5eXVlaXNlIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3OTM1ODg3OCwiZXhwIjoyMDk0OTM0ODc4fQ.02KUOemRQJ5NVKv6_8I6acyffMmbzDZq6fH0m8z425A',
+  );
+
   final dir = await getApplicationDocumentsDirectory();
   final isar = await Isar.open(
-    [ProfileSchema, ServerConfigSchema, AiConfigSchema,ChatMessageEntitySchema,],
+    [ServerConfigSchema, AiConfigSchema, ChatMessageEntitySchema,],
     directory: dir.path,
   );
 
@@ -26,10 +33,7 @@ void main() async {
   await setupDependencies(isar);
 
   // 3. Enrutador
-  // Lo ideal es que entres a tu AppRouter.dart y le quites
-  // los controladores del constructor, dejándolo limpio así:
   final appRouter = AppRouter();
-
 
   runApp(MyApp(appRouter: appRouter));
 }

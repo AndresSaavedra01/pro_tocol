@@ -1,6 +1,9 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:pro_tocol/injection.dart';
+import 'package:pro_tocol/model/entities/Server.dart';
 import 'package:pro_tocol/model/entities/chat_message.dart';
 import 'package:pro_tocol/model/entities/chat_message_entity.dart';
 import 'package:pro_tocol/model/repositories/ChatHistoryRepository.dart';
@@ -35,8 +38,16 @@ class _ChatIaPrompt {
 class ChatIaTab extends StatefulWidget {
   final String serverIp;
   final ChatIaController? controller;
+  final String profileId;
+  final Server? activeServer; // Para ejecutar scripts vía SSH/SFTP
 
-  const ChatIaTab({super.key, required this.serverIp, this.controller});
+  const ChatIaTab({
+    super.key,
+    required this.serverIp,
+    required this.profileId,
+    this.activeServer,
+    this.controller,
+  });
 
   @override
   State<ChatIaTab> createState() => _ChatIaTabState();
@@ -47,11 +58,11 @@ class _ChatIaTabState extends State<ChatIaTab> {
   final ScrollController _scrollController = ScrollController();
   bool _isSending = false;
   bool _awaitingFirstChunk = false;
+  bool _isScriptMode = false; // Modo generación de scripts
 
   IAService get _iaService => getIt<IAService>();
   ChatHistoryRepository get _historyRepo => getIt<ChatHistoryRepository>();
 
-  // La lista empieza vacía porque se cargará de la DB
   List<ChatMessage> _mensajes = [];
 
   @override
@@ -63,23 +74,21 @@ class _ChatIaTabState extends State<ChatIaTab> {
   }
 
   Future<void> _cargarHistorial() async {
-    final mensajesDb = await _historyRepo.getMessagesByServer(widget.serverIp);
-
+    final mensajesDb = await _historyRepo.getMessagesByServerAndProfile(
+        widget.serverIp, widget.profileId);
     setState(() {
       if (mensajesDb.isEmpty) {
-        // Si no hay mensajes guardados, mostramos el saludo inicial
         _mensajes = [
           ChatMessage(
-            text: "¡Hola! Soy tu asistente de Pro-Tocol. ¿En qué te puedo ayudar con el servidor ${widget.serverIp}?",
+            text:
+                "¡Hola! Soy tu asistente de Pro-Tocol. ¿En qué te puedo ayudar con el servidor ${widget.serverIp}?",
             isUser: false,
           )
         ];
       } else {
-        // Convertimos las entidades de Isar al modelo ChatMessage de la UI
-        _mensajes = mensajesDb.map((e) => ChatMessage(
-          text: e.content,
-          isUser: e.role == 'user',
-        )).toList();
+        _mensajes = mensajesDb
+            .map((e) => ChatMessage(text: e.content, isUser: e.role == 'user'))
+            .toList();
       }
     });
     _scrollToBottom();
@@ -90,9 +99,9 @@ class _ChatIaTabState extends State<ChatIaTab> {
     final textoUsuario = _textController.text.trim();
     if (textoUsuario.isEmpty) return;
 
-    // Guardar mensaje del usuario en la Base de Datos
     await _historyRepo.saveMessage(ChatMessageEntity(
       serverIp: widget.serverIp,
+      profileId: widget.profileId,
       role: 'user',
       content: textoUsuario,
       timestamp: DateTime.now(),
@@ -127,12 +136,151 @@ class _ChatIaTabState extends State<ChatIaTab> {
 
     setState(() {
       _mensajes.add(ChatMessage(text: userDisplay, isUser: true));
-      _mensajes.add(ChatMessage(text: '', isUser: false));
       _isSending = true;
+    });
+    _scrollToBottom();
+
+    if (_isScriptMode) {
+      await _handleScriptGeneration(prompt);
+    } else {
+      await _handleNormalChat(prompt);
+    }
+  }
+
+  // ================= MODO SCRIPT (nuevo) =================
+
+  Future<void> _handleScriptGeneration(String prompt) async {
+    setState(() {
+      _awaitingFirstChunk = true;
+      _mensajes.add(ChatMessage(text: '', isUser: false)); // placeholder
+    });
+    final aiIndex = _mensajes.length - 1;
+
+    try {
+      final scriptCode = await _iaService.generarScript(prompt);
+
+      setState(() {
+        _awaitingFirstChunk = false;
+        _mensajes[aiIndex] = ChatMessage(
+            text: "He generado tu script. Revisa la ventana emergente para confirmarlo.",
+            isUser: false);
+      });
+
+      if (mounted) _showScriptConfirmationDialog(scriptCode);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _awaitingFirstChunk = false;
+        _mensajes[aiIndex] =
+            ChatMessage(text: "Error al generar script: $e", isUser: false);
+      });
+    } finally {
+      if (mounted) setState(() => _isSending = false);
+      _scrollToBottom();
+    }
+  }
+
+  void _showScriptConfirmationDialog(String scriptCode) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        title: const Text("Script Generado",
+            style: TextStyle(color: AppColors.textPrimary)),
+        content: SingleChildScrollView(
+          child: Container(
+            padding: const EdgeInsets.all(12.0),
+            color: Colors.black54,
+            child: Text(
+              scriptCode,
+              style: const TextStyle(
+                  color: Colors.greenAccent,
+                  fontFamily: 'monospace',
+                  fontSize: 12),
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text("Cancelar",
+                  style: TextStyle(color: Colors.redAccent))),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
+            icon: const Icon(Icons.play_arrow, color: Colors.white),
+            label: const Text("Ejecutar en Servidor",
+                style: TextStyle(color: Colors.white)),
+            onPressed: () {
+              Navigator.pop(context);
+              _executeScriptOnServer(scriptCode);
+            },
+          )
+        ],
+      ),
+    );
+  }
+
+  Future<void> _executeScriptOnServer(String scriptCode) async {
+    if (widget.activeServer?.sshService == null ||
+        widget.activeServer!.sshService.sftp == null) {
+      _addSystemMessage("Error: No hay conexión SSH/SFTP activa con el servidor.");
+      return;
+    }
+
+    setState(() => _isSending = true);
+    _addSystemMessage("Iniciando despliegue y ejecución del script en /tmp/scripts...");
+
+    try {
+      final sftp = widget.activeServer!.sshService.sftp!;
+      final ssh = widget.activeServer!.sshService;
+
+      // Crear carpeta /tmp/scripts (ignorar si ya existe)
+      try {
+        await sftp.createDirectory("/tmp/scripts");
+      } catch (_) {}
+
+      // Guardar archivo temporal en el dispositivo
+      final tempDir = await getTemporaryDirectory();
+      final fileName = "auto_${DateTime.now().millisecondsSinceEpoch}.sh";
+      final tempFile = File('${tempDir.path}/$fileName');
+      await tempFile.writeAsString(scriptCode);
+
+      // ¡CORREGIDO! Subir archivo usando SFTP a /tmp/scripts
+      final remotePath = "/tmp/scripts/$fileName";
+      await sftp.uploadFile(tempFile.path, remotePath);
+
+      // ¡CORREGIDO! Dar permisos, limpiar retornos de carro (sed) y ejecutar con SSHService
+      final comandoEjecucion = "sed -i 's/\\r\$//' $remotePath && chmod +x $remotePath && $remotePath";
+      final resultado = await ssh.runSingleCommand(comandoEjecucion);
+
+      _addSystemMessage(
+          " Ejecucion Finalizada.\n\nSalida del terminal:\n```text\n$resultado\n```");
+          
+      // Opcional: Borramos el archivo temporal del celular para no llenarle la memoria
+      if (await tempFile.exists()) {
+        await tempFile.delete();
+      }
+
+    } catch (e) {
+      _addSystemMessage(" Fallo critico durante el despliegue: $e");
+    } finally {
+      if (mounted) setState(() => _isSending = false);
+    }
+  }
+
+  void _addSystemMessage(String text) {
+    setState(() => _mensajes.add(ChatMessage(text: text, isUser: false)));
+    _scrollToBottom();
+  }
+
+  // ================= CHAT NORMAL (original) =================
+
+  Future<void> _handleNormalChat(String prompt) async {
+    setState(() {
+      _mensajes.add(ChatMessage(text: '', isUser: false));
       _awaitingFirstChunk = true;
     });
-
-    _scrollToBottom();
 
     final aiIndex = _mensajes.length - 1;
     final buffer = StringBuffer();
@@ -143,22 +291,19 @@ class _ChatIaTabState extends State<ChatIaTab> {
         if (chunk.isEmpty) continue;
         buffer.write(chunk);
         setState(() {
-          if (_awaitingFirstChunk) {
-            _awaitingFirstChunk = false;
-          }
+          if (_awaitingFirstChunk) _awaitingFirstChunk = false;
           _mensajes[aiIndex] = ChatMessage(text: buffer.toString(), isUser: false);
         });
         _scrollToBottom();
       }
 
-      // Guardar la respuesta completa de la IA en la Base de Datos
       await _historyRepo.saveMessage(ChatMessageEntity(
         serverIp: widget.serverIp,
+        profileId: widget.profileId,
         role: 'assistant',
         content: buffer.toString(),
         timestamp: DateTime.now(),
       ));
-
     } catch (e) {
       if (!mounted) return;
       final friendly = _friendlyErrorMessage(e);
@@ -180,6 +325,8 @@ class _ChatIaTabState extends State<ChatIaTab> {
       }
     }
   }
+
+  // ================= MÉTODOS AUXILIARES (originales) =================
 
   Future<void> _executeInTerminal(String command) async {
     final trimmed = command.trim();
@@ -273,10 +420,11 @@ class _ChatIaTabState extends State<ChatIaTab> {
       return;
     }
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(fallbackMessage)),
-    );
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(fallbackMessage)));
   }
+
+  // ================= BUILD =================
 
   @override
   Widget build(BuildContext context) {
@@ -294,7 +442,8 @@ class _ChatIaTabState extends State<ChatIaTab> {
               }
               return ChatBubble(
                 message: message,
-                onExecuteCommand: message.isUser ? null : _executeInTerminal,
+                onExecuteCommand:
+                    message.isUser ? null : _executeInTerminal,
               );
             },
           ),
@@ -315,12 +464,28 @@ class _ChatIaTabState extends State<ChatIaTab> {
           child: SafeArea(
             child: Row(
               children: [
+                // Toggle para modo script
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text("Script",
+                        style: TextStyle(fontSize: 10, color: AppColors.textMuted)),
+                    Switch(
+                      value: _isScriptMode,
+                      onChanged: _isSending ? null : (val) => setState(() => _isScriptMode = val),
+                      activeColor: AppColors.primary,
+                    ),
+                  ],
+                ),
+                const SizedBox(width: 8),
                 Expanded(
                   child: TextField(
                     controller: _textController,
                     enabled: !_isSending,
                     decoration: InputDecoration(
-                      hintText: "Pregúntale a la IA...",
+                      hintText: _isScriptMode
+                          ? "Dile qué automatizar..."
+                          : "Pregúntale a la IA...",
                       hintStyle: const TextStyle(color: AppColors.textMuted),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(30.0),
@@ -328,7 +493,8 @@ class _ChatIaTabState extends State<ChatIaTab> {
                       ),
                       filled: true,
                       fillColor: AppColors.background,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                      contentPadding:
+                          const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
                     ),
                     style: const TextStyle(color: AppColors.textPrimary),
                     onSubmitted: (_) => _enviarMensaje(),
@@ -345,13 +511,16 @@ class _ChatIaTabState extends State<ChatIaTab> {
                     splashColor: Colors.white.withOpacity(0.1),
                     highlightColor: Colors.white.withOpacity(0.05),
                     child: Ink(
-                      child: const Padding(
-                        padding: EdgeInsets.all(12.0),
-                        child: Icon(
-                          Icons.send_rounded,
-                          color: Colors.white,
-                          size: 24,
-                        ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(12.0),
+                        child: _isSending
+                            ? const SizedBox(
+                                width: 24,
+                                height: 24,
+                                child: CircularProgressIndicator(
+                                    color: Colors.white, strokeWidth: 2))
+                            : const Icon(Icons.send_rounded,
+                                color: Colors.white, size: 24),
                       ),
                     ),
                   ),
@@ -394,7 +563,8 @@ class _TypingIndicatorBubble extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: const [
-            Text('Escribiendo...', style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
+            Text('Escribiendo...',
+                style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
             SizedBox(height: 6),
             SizedBox(
               width: 120,
