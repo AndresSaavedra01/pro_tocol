@@ -2236,18 +2236,23 @@ const AiConfigSchema = CollectionSchema(
       name: r'host',
       type: IsarType.string,
     ),
-    r'model': PropertySchema(
+    r'iaPersonality': PropertySchema(
       id: 1,
+      name: r'iaPersonality',
+      type: IsarType.string,
+    ),
+    r'model': PropertySchema(
+      id: 2,
       name: r'model',
       type: IsarType.string,
     ),
     r'port': PropertySchema(
-      id: 2,
+      id: 3,
       name: r'port',
       type: IsarType.long,
     ),
     r'provider': PropertySchema(
-      id: 3,
+      id: 4,
       name: r'provider',
       type: IsarType.string,
     )
@@ -2273,6 +2278,7 @@ int _aiConfigEstimateSize(
 ) {
   var bytesCount = offsets.last;
   bytesCount += 3 + object.host.length * 3;
+  bytesCount += 3 + object.iaPersonality.length * 3;
   bytesCount += 3 + object.model.length * 3;
   bytesCount += 3 + object.provider.length * 3;
   return bytesCount;
@@ -2285,9 +2291,10 @@ void _aiConfigSerialize(
   Map<Type, List<int>> allOffsets,
 ) {
   writer.writeString(offsets[0], object.host);
-  writer.writeString(offsets[1], object.model);
-  writer.writeLong(offsets[2], object.port);
-  writer.writeString(offsets[3], object.provider);
+  writer.writeString(offsets[1], object.iaPersonality);
+  writer.writeString(offsets[2], object.model);
+  writer.writeLong(offsets[3], object.port);
+  writer.writeString(offsets[4], object.provider);
 }
 
 AiConfig _aiConfigDeserialize(
@@ -2298,9 +2305,10 @@ AiConfig _aiConfigDeserialize(
 ) {
   final object = AiConfig(
     host: reader.readStringOrNull(offsets[0]) ?? '127.0.0.1',
-    model: reader.readStringOrNull(offsets[1]) ?? '',
-    port: reader.readLongOrNull(offsets[2]) ?? 11434,
-    provider: reader.readStringOrNull(offsets[3]) ?? 'ollama',
+    iaPersonality: reader.readStringOrNull(offsets[1]) ?? 'tatiana',
+    model: reader.readStringOrNull(offsets[2]) ?? '',
+    port: reader.readLongOrNull(offsets[3]) ?? 11434,
+    provider: reader.readStringOrNull(offsets[4]) ?? 'ollama',
   );
   object.id = id;
   return object;
@@ -2316,10 +2324,12 @@ P _aiConfigDeserializeProp<P>(
     case 0:
       return (reader.readStringOrNull(offset) ?? '127.0.0.1') as P;
     case 1:
-      return (reader.readStringOrNull(offset) ?? '') as P;
+      return (reader.readStringOrNull(offset) ?? 'tatiana') as P;
     case 2:
-      return (reader.readLongOrNull(offset) ?? 11434) as P;
+      return (reader.readStringOrNull(offset) ?? '') as P;
     case 3:
+      return (reader.readLongOrNull(offset) ?? 11434) as P;
+    case 4:
       return (reader.readStringOrNull(offset) ?? 'ollama') as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
@@ -2540,6 +2550,140 @@ extension AiConfigQueryFilter
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.greaterThan(
         property: r'host',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<AiConfig, AiConfig, QAfterFilterCondition> iaPersonalityEqualTo(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'iaPersonality',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<AiConfig, AiConfig, QAfterFilterCondition>
+      iaPersonalityGreaterThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'iaPersonality',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<AiConfig, AiConfig, QAfterFilterCondition> iaPersonalityLessThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'iaPersonality',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<AiConfig, AiConfig, QAfterFilterCondition> iaPersonalityBetween(
+    String lower,
+    String upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'iaPersonality',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<AiConfig, AiConfig, QAfterFilterCondition>
+      iaPersonalityStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'iaPersonality',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<AiConfig, AiConfig, QAfterFilterCondition> iaPersonalityEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'iaPersonality',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<AiConfig, AiConfig, QAfterFilterCondition> iaPersonalityContains(
+      String value,
+      {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'iaPersonality',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<AiConfig, AiConfig, QAfterFilterCondition> iaPersonalityMatches(
+      String pattern,
+      {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'iaPersonality',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<AiConfig, AiConfig, QAfterFilterCondition>
+      iaPersonalityIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'iaPersonality',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<AiConfig, AiConfig, QAfterFilterCondition>
+      iaPersonalityIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'iaPersonality',
         value: '',
       ));
     });
@@ -2930,6 +3074,18 @@ extension AiConfigQuerySortBy on QueryBuilder<AiConfig, AiConfig, QSortBy> {
     });
   }
 
+  QueryBuilder<AiConfig, AiConfig, QAfterSortBy> sortByIaPersonality() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'iaPersonality', Sort.asc);
+    });
+  }
+
+  QueryBuilder<AiConfig, AiConfig, QAfterSortBy> sortByIaPersonalityDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'iaPersonality', Sort.desc);
+    });
+  }
+
   QueryBuilder<AiConfig, AiConfig, QAfterSortBy> sortByModel() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'model', Sort.asc);
@@ -2978,6 +3134,18 @@ extension AiConfigQuerySortThenBy
   QueryBuilder<AiConfig, AiConfig, QAfterSortBy> thenByHostDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'host', Sort.desc);
+    });
+  }
+
+  QueryBuilder<AiConfig, AiConfig, QAfterSortBy> thenByIaPersonality() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'iaPersonality', Sort.asc);
+    });
+  }
+
+  QueryBuilder<AiConfig, AiConfig, QAfterSortBy> thenByIaPersonalityDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'iaPersonality', Sort.desc);
     });
   }
 
@@ -3039,6 +3207,14 @@ extension AiConfigQueryWhereDistinct
     });
   }
 
+  QueryBuilder<AiConfig, AiConfig, QDistinct> distinctByIaPersonality(
+      {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'iaPersonality',
+          caseSensitive: caseSensitive);
+    });
+  }
+
   QueryBuilder<AiConfig, AiConfig, QDistinct> distinctByModel(
       {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
@@ -3071,6 +3247,12 @@ extension AiConfigQueryProperty
   QueryBuilder<AiConfig, String, QQueryOperations> hostProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'host');
+    });
+  }
+
+  QueryBuilder<AiConfig, String, QQueryOperations> iaPersonalityProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'iaPersonality');
     });
   }
 
