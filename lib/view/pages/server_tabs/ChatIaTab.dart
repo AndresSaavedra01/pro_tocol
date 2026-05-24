@@ -208,7 +208,7 @@ class _ChatIaTabState extends State<ChatIaTab> {
         content: SingleChildScrollView(
           child: Container(
             padding: const EdgeInsets.all(12.0),
-            color: Colors.black54,
+            color: Colors.white,
             child: Text(
               scriptCode,
               style: const TextStyle(color: Colors.greenAccent, fontFamily: 'monospace', fontSize: 12),
@@ -499,7 +499,12 @@ class _ChatIaTabState extends State<ChatIaTab> {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
+    return Theme(
+        data: ThemeData.dark().copyWith(
+          scaffoldBackgroundColor: AppColors.background,
+          cardColor: AppColors.surface,
+        ),
+      child: Column(
       children: [
         Expanded(
           child: ListView.builder(
@@ -601,6 +606,7 @@ class _ChatIaTabState extends State<ChatIaTab> {
           ),
         ),
       ],
+      )
     );
   }
 

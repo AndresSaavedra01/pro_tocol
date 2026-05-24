@@ -55,7 +55,15 @@ Future<void> setupDependencies(Isar isar) async {
   getIt.registerLazySingleton<TempSessionRepository>(() => TempSessionRepository());
 
   // 3.1 Servicio IA
-  getIt.registerLazySingleton<IAService>(() => IAService());
+  getIt.registerLazySingleton<AiConfigRepository>(() => AiConfigRepository(
+    aiConfigDAO,
+    getIt<FlutterSecureStorage>(),
+  ));
+
+  // 3.1 Servicio IA
+  getIt.registerLazySingleton<IAService>(() => IAService(
+    getIt<AiConfigRepository>(),
+  ));
 
   // 4. Managers
   getIt.registerLazySingleton<CommandHistoryManager>(() => CommandHistoryManager());
