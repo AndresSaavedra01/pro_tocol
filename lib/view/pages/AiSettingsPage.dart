@@ -17,6 +17,9 @@ class AiSettingsPage extends StatefulWidget {
 class _AiSettingsPageState extends State<AiSettingsPage> {
   static const String _providerOllama = 'ollama';
   static const String _providerGroq = 'groq';
+  static const String _personalityTatiana = 'tatiana';
+  static const String _personalityIberlina = 'iberlina';
+  static const String _personalityYousua = 'yousua';
 
   final _formKey = GlobalKey<FormState>();
 
@@ -25,6 +28,7 @@ class _AiSettingsPageState extends State<AiSettingsPage> {
   final TextEditingController _tokenController = TextEditingController();
 
   String _provider = _providerOllama;
+  String _personality = _personalityTatiana;
   List<String> _models = [];
   String? _selectedModel;
 
@@ -58,6 +62,9 @@ class _AiSettingsPageState extends State<AiSettingsPage> {
 
     _config = config ?? AiConfig();
     _provider = _config!.provider.isEmpty ? _providerOllama : _config!.provider;
+    _personality = _config!.iaPersonality.isEmpty
+      ? _personalityTatiana
+      : _config!.iaPersonality;
     _hostController.text = _config!.host;
     _portController.text = _config!.port.toString();
     _selectedModel = _config!.model.isEmpty ? null : _config!.model;
@@ -76,6 +83,7 @@ class _AiSettingsPageState extends State<AiSettingsPage> {
   Future<void> _persistConfig() async {
     final config = _config ?? AiConfig();
     config.provider = _provider;
+    config.iaPersonality = _personality;
     config.host = _hostController.text.trim();
     config.port = int.tryParse(_portController.text.trim()) ?? config.port;
     config.model = _selectedModel ?? '';
@@ -189,6 +197,9 @@ class _AiSettingsPageState extends State<AiSettingsPage> {
                           _buildSectionTitle('Proveedor'),
                           _buildProviderDropdown(),
                           const SizedBox(height: 16),
+                          _buildSectionTitle('Asistente IA'),
+                          _buildPersonalityDropdown(),
+                          const SizedBox(height: 16),
                           _buildSectionTitle('Conexion'),
                           Row(
                             children: [
@@ -265,6 +276,36 @@ class _AiSettingsPageState extends State<AiSettingsPage> {
         _applyProviderDefaults(force: true);
       },
       decoration: _darkInputDecoration('Proveedor'),
+      dropdownColor: AppColors.surface,
+      style: const TextStyle(color: AppColors.textPrimary),
+    );
+  }
+
+  Widget _buildPersonalityDropdown() {
+    return DropdownButtonFormField<String>(
+      value: _personality,
+      items: const [
+        DropdownMenuItem(
+          value: _personalityTatiana,
+          child: Text('Tatiana — Asistente General'),
+        ),
+        DropdownMenuItem(
+          value: _personalityIberlina,
+          child: Text('Iberlina — Seguridad & Hardening'),
+        ),
+        DropdownMenuItem(
+          value: _personalityYousua,
+          child: Text('Yousua — Automatizacion & Scripts'),
+        ),
+      ],
+      onChanged: (value) async {
+        if (value == null) return;
+        setState(() {
+          _personality = value;
+        });
+        await _persistConfig();
+      },
+      decoration: _darkInputDecoration('Asistente IA'),
       dropdownColor: AppColors.surface,
       style: const TextStyle(color: AppColors.textPrimary),
     );

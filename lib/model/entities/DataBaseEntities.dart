@@ -29,11 +29,13 @@ class AiConfig {
   String host;
   int port;
   String model;
+  String iaPersonality;
 
   AiConfig({
     this.provider = 'ollama',
     this.host = '127.0.0.1',
     this.port = 11434,
     this.model = '',
+    this.iaPersonality = 'tatiana',
   });
 }
