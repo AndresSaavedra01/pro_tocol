@@ -12,8 +12,32 @@ import 'package:pro_tocol/view/components/chat_bubble.dart';
 import 'package:pro_tocol/view/theme/AppColors.dart';
 import 'package:xterm/xterm.dart';
 
+class ChatIaController extends ChangeNotifier {
+  final List<_ChatIaPrompt> _queue = [];
+
+  void submitPrompt(String prompt, {String? userDisplay}) {
+    _queue.add(_ChatIaPrompt(prompt, userDisplay));
+    notifyListeners();
+  }
+
+  _ChatIaPrompt? nextPending() {
+    if (_queue.isEmpty) return null;
+    return _queue.removeAt(0);
+  }
+
+  bool get hasPending => _queue.isNotEmpty;
+}
+
+class _ChatIaPrompt {
+  final String prompt;
+  final String? userDisplay;
+
+  const _ChatIaPrompt(this.prompt, this.userDisplay);
+}
+
 class ChatIaTab extends StatefulWidget {
   final String serverIp;
+  final ChatIaController? controller;
   final String profileId;
   final Server? activeServer; // Para ejecutar scripts vía SSH/SFTP
 
@@ -22,6 +46,7 @@ class ChatIaTab extends StatefulWidget {
     required this.serverIp,
     required this.profileId,
     this.activeServer,
+    this.controller,
   });
 
   @override
@@ -44,6 +69,8 @@ class _ChatIaTabState extends State<ChatIaTab> {
   void initState() {
     super.initState();
     _cargarHistorial();
+    widget.controller?.addListener(_handleExternalPrompt);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _handleExternalPrompt());
   }
 
   Future<void> _cargarHistorial() async {
@@ -80,17 +107,43 @@ class _ChatIaTabState extends State<ChatIaTab> {
       timestamp: DateTime.now(),
     ));
 
+    _textController.clear();
+    await _sendPromptInternal(prompt: textoUsuario, userDisplay: textoUsuario);
+  }
+
+  void _handleExternalPrompt() {
+    if (!mounted) return;
+    _drainExternalQueue();
+  }
+
+  void _drainExternalQueue() {
+    if (_isSending) return;
+    final controller = widget.controller;
+    if (controller == null) return;
+    final next = controller.nextPending();
+    if (next == null) return;
+    _sendPromptInternal(
+      prompt: next.prompt,
+      userDisplay: next.userDisplay ?? 'Analiza este error del terminal.',
+    );
+  }
+
+  Future<void> _sendPromptInternal({
+    required String prompt,
+    required String userDisplay,
+  }) async {
+    if (_isSending) return;
+
     setState(() {
-      _mensajes.add(ChatMessage(text: textoUsuario, isUser: true));
+      _mensajes.add(ChatMessage(text: userDisplay, isUser: true));
       _isSending = true;
     });
-    _textController.clear();
     _scrollToBottom();
 
     if (_isScriptMode) {
-      await _handleScriptGeneration(textoUsuario);
+      await _handleScriptGeneration(prompt);
     } else {
-      await _handleNormalChat(textoUsuario);
+      await _handleNormalChat(prompt);
     }
   }
 
@@ -223,7 +276,7 @@ class _ChatIaTabState extends State<ChatIaTab> {
 
   // ================= CHAT NORMAL (original) =================
 
-  Future<void> _handleNormalChat(String textoUsuario) async {
+  Future<void> _handleNormalChat(String prompt) async {
     setState(() {
       _mensajes.add(ChatMessage(text: '', isUser: false));
       _awaitingFirstChunk = true;
@@ -233,8 +286,7 @@ class _ChatIaTabState extends State<ChatIaTab> {
     final buffer = StringBuffer();
 
     try {
-      await for (final chunk
-          in _iaService.generateStream(textoUsuario, _mensajes)) {
+      await for (final chunk in _iaService.generateStream(prompt, _mensajes)) {
         if (!mounted) return;
         if (chunk.isEmpty) continue;
         buffer.write(chunk);
@@ -267,6 +319,9 @@ class _ChatIaTabState extends State<ChatIaTab> {
           _isSending = false;
           _awaitingFirstChunk = false;
         });
+      }
+      if (mounted) {
+        _drainExternalQueue();
       }
     }
   }
@@ -480,6 +535,7 @@ class _ChatIaTabState extends State<ChatIaTab> {
 
   @override
   void dispose() {
+    widget.controller?.removeListener(_handleExternalPrompt);
     _textController.dispose();
     _scrollController.dispose();
     super.dispose();

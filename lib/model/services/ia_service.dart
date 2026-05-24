@@ -19,7 +19,23 @@ class IAService {
 
   IAService(this._configRepository);
 
+  String _getEndpointForPersonality(String personality) {
+    switch (personality) {
+      case 'tatiana':
+        return '/generar/';
+      case 'iberlina':
+        return '/generar-iberlina/';
+      case 'yousua':
+        return '/generar-yousua/';
+      default:
+        return '/generar/';
+    }
+  }
+
   Stream<String> generateStream(String prompt, List<ChatMessage> historial) async* {
+    final config = await _configRepository.getConfig() ?? AiConfig();
+    final token = await _configRepository.getToken();
+
     // Mapeamos el historial al formato que espera el Backend
     final historialMap = historial.map((m) => {
       'role': m.isUser ? 'user' : 'assistant',
@@ -27,16 +43,17 @@ class IAService {
     }).toList();
 
     // El endpoint final
-    final url = Uri.parse('$_baseUrl/generar/');
+    final endpoint = _getEndpointForPersonality(config.iaPersonality);
+    final url = Uri.parse('$_baseUrl$endpoint');
 
     final request = http.Request('POST', url)
       ..headers.addAll({
         'Content-Type': 'application/json',
-        'X-API-Key': _apiKey,
+        'X-API-Key': token?.isNotEmpty == true ? token! : _apiKey,
       })
       ..body = jsonEncode({
         'historial': historialMap,
-        'modelo': 'llama-3.3-70b-versatile', // O el que prefieras por defecto
+        'modelo': config.model,
       });
 
     final client = http.Client();
@@ -94,6 +111,9 @@ class IAService {
     ];
   }
   Future<String> generarScript(String prompt) async {
+    final config = await _configRepository.getConfig() ?? AiConfig();
+    final token = await _configRepository.getToken();
+
     // Inyectamos la instrucción requerida al prompt
     final String promptConContexto = "$prompt\n\n[IMPORTANTE: El script se guardará y ejecutará desde el directorio '/scripts' en el servidor. Adapta cualquier ruta relativa a este hecho.]";
 
@@ -101,13 +121,13 @@ class IAService {
     final request = http.Request('POST', url)
       ..headers.addAll({
         'Content-Type': 'application/json',
-        'X-API-Key': _apiKey,
+        'X-API-Key': token?.isNotEmpty == true ? token! : _apiKey,
       })
       ..body = jsonEncode({
         'historial': [
           {'role': 'user', 'content': promptConContexto}
         ],
-        'modelo': 'llama-3.3-70b-versatile',
+        'modelo': config.model,
       });
 
     final client = http.Client();
