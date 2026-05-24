@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:dartssh2/dartssh2.dart';
 import 'package:pro_tocol/model/entities/GeneralConfig.dart';
 import 'package:pro_tocol/model/entities/ProcessNode.dart';
@@ -209,5 +210,23 @@ class SSHService {
     _client = null;
     _sftpService = null;
     config = null;
+  }
+
+  // --- NUEVA FUNCIÓN PARA EJECUTAR CON SUDO (Corregida) ---
+  Future<String> runSudoCommand(String command, String password) async {
+    if (_client == null) return 'Error: Desconectado';
+    try {
+      // 1. Escapamos las comillas simples de la contraseña por seguridad
+      final safePassword = password.replaceAll("'", "'\\''");
+
+      // 2. Usamos 'echo' para inyectar la contraseña en stdin a través de un pipe (|)
+      // Esto evita los bloqueos de lectura de consola (deadlocks).
+      final sudoCmd = "echo '$safePassword' | sudo -S -p '' $command";
+
+      // 3. Reutilizamos tu método runSingleCommand que ya procesa los datos correctamente
+      return await runSingleCommand(sudoCmd);
+    } catch (e) {
+      return 'Error al ejecutar sudo: $e';
+    }
   }
 }

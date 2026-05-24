@@ -1,281 +1,399 @@
-import 'dart:typed_data';
+import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:file_picker/file_picker.dart'; // Para descargar archivos
-import 'package:pro_tocol/controller/ServerConnectionController.dart';
+import 'package:flutter/services.dart'; // NECESARIO PARA EL PORTAPAPELES
+import 'package:path_provider/path_provider.dart';
 import 'package:pro_tocol/injection.dart';
 import 'package:pro_tocol/model/entities/DataBaseEntities.dart';
-import '../../theme/AppColors.dart';
+import 'package:pro_tocol/controller/KeyController.dart';
+import 'package:pro_tocol/view/theme/AppColors.dart';
 
 class SeguridadTab extends StatefulWidget {
   final ServerConfig serverConfig;
 
-  const SeguridadTab({
-    super.key,
-    required this.serverConfig,
-  });
+  const SeguridadTab({super.key, required this.serverConfig});
 
   @override
   State<SeguridadTab> createState() => _SeguridadTabState();
-
-  ServerConnectionController get _connectionController => getIt<ServerConnectionController>();
 }
 
-class _SeguridadTabState extends State<SeguridadTab> {
+class _SeguridadTabState extends State<SeguridadTab> with AutomaticKeepAliveClientMixin {
+  final KeyController _keyController = getIt<KeyController>();
+  final TextEditingController _passwordController = TextEditingController();
+
+  PairKeys? _currentKeyPair;
   bool _isLoading = false;
-  late ServerConfig _currentConfig; // Usamos una variable local para permitir refrescos
+  bool _isKeyAssociated = false;
+
+  // ESTO PREVIENE QUE EL TAB SE REINICIE AL CAMBIAR DE PESTAÑA
+  @override
+  bool get wantKeepAlive => true;
 
   @override
   void initState() {
     super.initState();
-    _currentConfig = widget.serverConfig;
+    _checkExistingKeys();
   }
 
-  bool get _hasKeys =>
-      _currentConfig.keyPairId != null &&
-          _currentConfig.keyPairId!.isNotEmpty;
-
-  // --- LÓGICA DE EXPORTACIÓN Y DESCARGA ---
-
-  Future<void> _exportarLlave(bool esPublica, {bool descargar = false}) async {
+  /// Carga inicial del estado de llaves del servidor desde Isar
+  Future<void> _checkExistingKeys() async {
+    if (!mounted) return;
     setState(() => _isLoading = true);
+
     try {
-      final keyId = _currentConfig.keyPairId!;
-      final String? keyContent;
+      final isar = _keyController.isar;
 
-      if (esPublica) {
-        keyContent = await widget._connectionController.sshKeyController.getPublicKey(keyId);
-      } else {
-        keyContent = await widget._connectionController.sshKeyController.getPrivateKey(keyId);
-      }
+      // Buscamos la instancia fresca del servidor administrado por Isar
+      final managedServer = await isar.collection<ServerConfig>().get(widget.serverConfig.id);
 
-      if (keyContent == null) return;
-
-      if (descargar) {
-        // Opción: Descargar como archivo
-        final String fileName = esPublica ? "id_rsa_server.pub" : "id_rsa_server.pem";
-
-        String? outputFile = await FilePicker.platform.saveFile(
-          dialogTitle: 'Guardar llave ${esPublica ? "Pública" : "Privada"}',
-          fileName: fileName,
-          bytes: Uint8List.fromList(keyContent.codeUnits),
-        );
-
-        if (outputFile != null && mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('✅ Archivo guardado: $fileName'), backgroundColor: Colors.green),
-          );
-        }
-      } else {
-        // Opción: Copiar al portapapeles
-        await Clipboard.setData(ClipboardData(text: keyContent));
+      if (managedServer != null) {
+        await managedServer.keyPair.load();
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(esPublica
-                  ? '📋 Llave PÚBLICA copiada al portapapeles.'
-                  : '🔐 Llave PRIVADA copiada. ¡Mantenla segura!'),
-              backgroundColor: esPublica ? AppColors.primary : Colors.orange,
-            ),
-          );
+          setState(() {
+            _currentKeyPair = managedServer.keyPair.value;
+            // Si tiene llave asignada en la base de datos, está asociada
+            _isKeyAssociated = _currentKeyPair != null;
+          });
         }
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
-        );
-      }
+      debugPrint('Error al cargar llaves desde Isar: $e');
     } finally {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
-  // --- LÓGICA DE GENERACIÓN ---
-
+  /// Genera un par de llaves localmente
   Future<void> _generarLlaves() async {
     setState(() => _isLoading = true);
     try {
-      // 1. Generar e instalar llaves
-      await widget._connectionController.upgradeServerToKeyAuth(_currentConfig.id);
+      final name = 'Key-${widget.serverConfig.host}';
+      final newKey = await _keyController.generateKeyPair(name);
 
-      // 2. Refrescar la configuración local desde la DB para detectar que ya tiene keyPairId
-      final updated = await widget._connectionController.getServerConfig(_currentConfig.id);
+      setState(() {
+        _currentKeyPair = newKey;
+        _isKeyAssociated = false; // Aún falta asociarla al servidor físico
+      });
 
-      if (mounted && updated != null) {
-        setState(() {
-          _currentConfig = updated;
-          _isLoading = false;
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('✅ Llaves generadas e instaladas con éxito.'), backgroundColor: Colors.green),
-        );
-      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Par de llaves RSA generado exitosamente.')),
+      );
     } catch (e) {
-      if (mounted) {
-        setState(() => _isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('❌ Error al generar llaves: $e'), backgroundColor: Colors.red),
-        );
-      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error al generar llaves: $e')),
+      );
+    } finally {
+      setState(() => _isLoading = false);
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const Text(
-            'Seguridad del Servidor',
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
-            textAlign: TextAlign.center,
+  /// Muestra el modal para ingresar clave SSH e instalar la llave pública
+  Future<void> _mostrarDialogoAsociacion() async {
+    _passwordController.clear();
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.background,
+        title: const Text('Asociar Llave al Servidor', style: TextStyle(color: AppColors.textPrimary)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Se instalará la llave pública en el servidor remoto. Ingresa la contraseña actual de SSH para autorizar esta operación:',
+              style: TextStyle(color: AppColors.textMuted),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _passwordController,
+              obscureText: true,
+              style: const TextStyle(color: AppColors.textPrimary),
+              decoration: const InputDecoration(
+                labelText: 'Contraseña SSH Actual',
+                labelStyle: TextStyle(color: AppColors.textMuted),
+                enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: AppColors.textMuted)),
+                focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: AppColors.primary)),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancelar', style: TextStyle(color: AppColors.textMuted)),
           ),
-          const SizedBox(height: 24),
-          if (_isLoading)
-            const Center(child: Padding(
-              padding: EdgeInsets.all(20.0),
-              child: CircularProgressIndicator(color: AppColors.primary),
-            ))
-          else if (_hasKeys)
-            _buildSecureState()
-          else
-            _buildUnsecureState(),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
+            onPressed: () async {
+              final password = _passwordController.text.trim();
+              if (password.isEmpty) return;
+
+              Navigator.pop(context);
+              setState(() => _isLoading = true);
+
+              try {
+                if (_currentKeyPair == null) return;
+
+                final exito = await _keyController.associateKeyToServer(
+                  _currentKeyPair!,
+                  widget.serverConfig,
+                  password,
+                );
+
+                if (exito) {
+                  await _checkExistingKeys(); // Refrescar estado completo desde Isar
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Llave pública asociada e instalada correctamente.')),
+                  );
+                }
+              } catch (e) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Error al asociar llave: $e')),
+                );
+              } finally {
+                setState(() => _isLoading = false);
+              }
+            },
+            child: const Text('Confirmar', style: TextStyle(color: Colors.white)),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildSecureState() {
-    return Column(
-      children: [
-        const Icon(Icons.verified_user, color: Colors.green, size: 64),
-        const SizedBox(height: 16),
-        const Text('Servidor Protegido', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.green)),
-        const SizedBox(height: 24),
+  /// Elimina las llaves de la base de datos local y rompe el vínculo
+  Future<void> _eliminarLlaves() async {
+    if (_currentKeyPair == null) return;
 
-        // Tarjeta para Llave Pública
-        _buildKeyActionCard(
-          title: "Llave Pública",
-          subtitle: "Úsala para autorizar este móvil en otros servidores.",
-          icon: Icons.public,
-          onCopy: () => _exportarLlave(true, descargar: false),
-          onDownload: () => _exportarLlave(true, descargar: true),
-        ),
+    setState(() => _isLoading = true);
+    try {
+      await _keyController.deleteKeyPairFromServer(widget.serverConfig, _currentKeyPair!);
+      setState(() {
+        _currentKeyPair = null;
+        _isKeyAssociated = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Llaves eliminadas correctamente.')),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error al eliminar llaves: $e')),
+      );
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
 
-        const SizedBox(height: 16),
-
-        // Tarjeta para Llave Privada
-        _buildKeyActionCard(
-          title: "Llave Privada",
-          subtitle: "Identidad secreta del servidor. No la compartas.",
-          icon: Icons.vpn_key,
-          isCritical: true,
-          onCopy: () => _exportarLlave(false, descargar: false),
-          onDownload: () => _exportarLlave(false, descargar: true),
-        ),
-      ],
+  /// Copia el texto pasado al portapapeles y muestra un mensaje
+  void _copiarAlPortapapeles(String texto, String mensajeExito) {
+    Clipboard.setData(ClipboardData(text: texto));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(mensajeExito)),
     );
   }
 
-  Widget _buildKeyActionCard({
-    required String title,
-    required String subtitle,
-    required IconData icon,
-    required VoidCallback onCopy,
-    required VoidCallback onDownload,
-    bool isCritical = false
-  }) {
-    final color = isCritical ? Colors.orange : AppColors.primary;
+  @override
+  Widget build(BuildContext context) {
+    // REQUERIDO POR AutomaticKeepAliveClientMixin
+    super.build(context);
 
-    return Card(
-      color: AppColors.surface,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: color.withOpacity(0.3))),
+    if (_isLoading) {
+      return const Center(
+        child: CircularProgressIndicator(valueColor: AlwaysStoppedAnimation(AppColors.primary)),
+      );
+    }
+
+    return SingleChildScrollView(
       child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                Icon(icon, color: color),
-                const SizedBox(width: 12),
-                Expanded(
+            const Text(
+              'Seguridad del Servidor',
+              style: TextStyle(color: AppColors.textPrimary, fontSize: 20, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Administra la autenticación mediante claves SSH para evitar el uso de contraseñas en texto plano.',
+              style: TextStyle(color: AppColors.textMuted, fontSize: 14),
+            ),
+            const SizedBox(height: 24),
+
+            if (_currentKeyPair == null) ...[
+              // ESTADO 1: Sin llaves generadas
+              Card(
+                color: AppColors.surface,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                child: Padding(
+                  padding: const EdgeInsets.all(20.0),
                   child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(title, style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
-                      Text(subtitle, style: const TextStyle(fontSize: 12, color: AppColors.textMuted)),
+                      const Icon(Icons.vpn_key_outlined, size: 48, color: AppColors.textMuted),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'Autenticación por Llaves Desactivada',
+                        style: TextStyle(color: AppColors.textPrimary, fontSize: 16, fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'Este servidor actualmente no tiene llaves SSH configuradas localmente en la aplicación.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: AppColors.textMuted, fontSize: 13),
+                      ),
+                      const SizedBox(height: 20),
+                      ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primary,
+                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                        onPressed: _generarLlaves,
+                        icon: const Icon(Icons.add, color: Colors.white),
+                        label: const Text('Generar Par de Llaves', style: TextStyle(color: Colors.white)),
+                      ),
                     ],
                   ),
                 ),
-              ],
-            ),
-            const Divider(height: 24, color: Colors.white10),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: onCopy,
-                    icon: const Icon(Icons.copy, size: 18),
-                    label: const Text("Copiar"),
-                    style: OutlinedButton.styleFrom(foregroundColor: color, side: BorderSide(color: color)),
+              ),
+            ] else ...[
+              // ESTADO 2: Llaves existentes o recién generadas
+              Card(
+                color: AppColors.surface,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            _isKeyAssociated ? Icons.verified_user : Icons.gpp_maybe,
+                            color: _isKeyAssociated ? AppColors.success : Colors.amber,
+                            size: 28,
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  _currentKeyPair!.name,
+                                  style: const TextStyle(color: AppColors.textPrimary, fontSize: 16, fontWeight: FontWeight.bold),
+                                ),
+                                Text(
+                                  _isKeyAssociated ? 'Asociada y activa en el servidor' : 'Generada localmente (Sin asociar al servidor remoto)',
+                                  style: TextStyle(
+                                    color: _isKeyAssociated ? AppColors.success : Colors.amber,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const Divider(color: Colors.white10, height: 24),
+
+                      // LLAVE PÚBLICA CON BOTÓN COPIAR
+                      const Text('Llave Pública (OpenSSH):', style: TextStyle(color: AppColors.textPrimary, fontSize: 13, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 6),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.only(left: 10, top: 2, bottom: 2, right: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.black26,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                _currentKeyPair!.publicKeyOpenSsh.isNotEmpty
+                                    ? _currentKeyPair!.publicKeyOpenSsh
+                                    : 'Llave importada / Contenido privado',
+                                style: const TextStyle(color: AppColors.textMuted, fontSize: 11, fontFamily: 'monospace'),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.copy, color: AppColors.primary, size: 20),
+                              tooltip: 'Copiar llave pública',
+                              onPressed: () => _copiarAlPortapapeles(_currentKeyPair!.publicKeyOpenSsh, 'Llave pública copiada'),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // LLAVE PRIVADA CON BOTÓN COPIAR (Oculta por defecto en UI)
+                      const Text('Llave Privada (RSA):', style: TextStyle(color: AppColors.textPrimary, fontSize: 13, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 6),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.only(left: 10, top: 2, bottom: 2, right: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.black26,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Row(
+                          children: [
+                            const Expanded(
+                              child: Text(
+                                '••••••••••••••••••••••••••••••••••••••••••••••',
+                                style: TextStyle(color: AppColors.textMuted, fontSize: 11, fontFamily: 'monospace', letterSpacing: 2),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.copy, color: AppColors.primary, size: 20),
+                              tooltip: 'Copiar llave privada',
+                              onPressed: () => _copiarAlPortapapeles(_currentKeyPair!.privateKeyPem, 'Llave privada copiada al portapapeles. ¡Mantenla segura!'),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: onDownload,
-                    icon: const Icon(Icons.download, size: 18),
-                    label: const Text("Descargar"),
-                    style: ElevatedButton.styleFrom(backgroundColor: color, foregroundColor: Colors.white),
+              ),
+              const SizedBox(height: 20),
+
+              // Panel Operacional
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  if (!_isKeyAssociated) ...[
+                    ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.indigo[800]),
+                      onPressed: _mostrarDialogoAsociacion,
+                      icon: const Icon(Icons.cloud_upload, color: Colors.white),
+                      label: const Text('Asociar al Servidor', style: TextStyle(color: Colors.white)),
+                    ),
+                    const SizedBox(width: 12),
+                  ],
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.red[900]),
+                    onPressed: _eliminarLlaves,
+                    icon: const Icon(Icons.delete_forever, color: Colors.white),
+                    label: const Text('Eliminar Llaves', style: TextStyle(color: Colors.white)),
                   ),
-                ),
-              ],
-            )
+                ],
+              ),
+            ],
           ],
         ),
       ),
     );
   }
 
-  Widget _buildUnsecureState() {
-    return Card(
-      color: AppColors.surface,
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          children: [
-            const Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 80),
-            const SizedBox(height: 16),
-            const Text('Acceso por Contraseña', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.orange)),
-            const SizedBox(height: 12),
-            const Text(
-              'Este servidor no tiene llaves SSH configuradas. El acceso por contraseña es menos seguro.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: AppColors.textMuted),
-            ),
-            const SizedBox(height: 32),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: _generarLlaves,
-                icon: const Icon(Icons.security),
-                label: const Text('Generar e Instalar Llaves Ahora'),
-                style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
+  @override
+  void dispose() {
+    _passwordController.dispose();
+    super.dispose();
   }
 }

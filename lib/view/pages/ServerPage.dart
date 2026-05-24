@@ -294,7 +294,7 @@ class _ServerPageState extends State<ServerPage> {
               serverConfig: widget.serverConfig,
               activeServer: _activeServer,
             ),
-            SeguridadTab(
+            SeguridadTab( // <-- AÑADIDO AQUÍ COMO EL SEXTO ELEMENTO
               serverConfig: widget.serverConfig,
             ),
           ],

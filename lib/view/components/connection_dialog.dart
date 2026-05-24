@@ -71,7 +71,7 @@ class _ConnectionFormDialogState extends State<ConnectionFormDialog> {
   // MÉTODO PARA CARGAR ARCHIVOS
   Future<void> _pickKeyFile(TextEditingController controller) async {
     try {
-      FilePickerResult? result = await FilePicker.platform.pickFiles(
+      FilePickerResult? result = await FilePicker.pickFiles(
         type: FileType.any, // Algunas llaves no tienen extensión .txt
       );
 

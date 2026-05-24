@@ -385,7 +385,6 @@ class _WorkspacePageState extends State<WorkspacePage> {
         initialPass: server.password,
         // PASAMOS LOS VALORES INICIALES QUE AHORA SOPORTA EL DIALOG
         initialPort: server.port,
-        initialKeyId: server.keyPairId,
 
         onSubmit: (host, user, pass, port, privKey, pubKey) async {
           server.host = host;
@@ -396,7 +395,6 @@ class _WorkspacePageState extends State<WorkspacePage> {
           // Si se ingresó una llave nueva (privada)
           if (privKey != null && privKey.isNotEmpty) {
             final newKeyId = await widget._connectionController.sshKeyController.saveManualKey(privKey);
-            server.keyPairId = newKeyId;
           }
 
           await widget._connectionController.updateServer(server);

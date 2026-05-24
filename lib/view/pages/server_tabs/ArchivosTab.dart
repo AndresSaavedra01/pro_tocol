@@ -92,7 +92,7 @@ class _ArchivosTabState extends State<ArchivosTab> {
   // --- LÓGICA DE ARCHIVOS (SUBIR, BAJAR, PEGAR) ---
 
   Future<void> _handleUpload() async {
-    FilePickerResult? result = await FilePicker.platform.pickFiles();
+    FilePickerResult? result = await FilePicker.pickFiles();
     if (result != null && result.files.single.path != null) {
       setState(() => _isLoading = true);
       final localPath = result.files.single.path!;
@@ -111,7 +111,7 @@ class _ArchivosTabState extends State<ArchivosTab> {
   }
 
   Future<void> _handleUploadFolder() async {
-    String? directoryPath = await FilePicker.platform.getDirectoryPath();
+    String? directoryPath = await FilePicker.getDirectoryPath();
     if (directoryPath != null) {
       setState(() => _isLoading = true);
       try {
@@ -480,7 +480,7 @@ class _ArchivosTabState extends State<ArchivosTab> {
               heroTag: "transfer_menu",
               backgroundColor: AppColors.primary,
               onPressed: _showAddMenu,
-              child: const Icon(Icons.sync, color: Colors.white), 
+              child: const Icon(Icons.dashboard_customize_outlined, color: Colors.white),
             ),
           ],
         ),
@@ -504,4 +504,5 @@ class _ArchivosTabState extends State<ArchivosTab> {
       ),
     );
   }
+
 }
