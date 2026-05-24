@@ -87,8 +87,9 @@ class _ChatIaTabState extends State<ChatIaTab> {
         ];
       } else {
         _mensajes = mensajesDb
-            .map((e) => ChatMessage(text: e.content, isUser: e.role == 'user'))
-            .toList();
+          .map((e) => ChatMessage(
+            text: e.editedContent ?? e.content, isUser: e.role == 'user'))
+          .toList();
       }
     });
     _scrollToBottom();
@@ -345,6 +346,68 @@ class _ChatIaTabState extends State<ChatIaTab> {
     }
   }
 
+  Future<ChatMessageEntity?> _findUserMessageEntityByText(String text) async {
+    final mensajesDb = await _historyRepo.getMessagesByServerAndProfile(
+        widget.serverIp, widget.profileId);
+    for (final entity in mensajesDb) {
+      final display = entity.editedContent ?? entity.content;
+      if (entity.role == 'user' && display == text) {
+        return entity;
+      }
+    }
+    return null;
+  }
+
+  Future<void> _deleteAllChat() async {
+    await _historyRepo.deleteAllByServerAndProfile(
+        widget.serverIp, widget.profileId);
+    await _cargarHistorial();
+  }
+
+  Future<void> _editUserMessage(int index, ChatMessage message) async {
+    final controller = TextEditingController(text: message.text);
+    final newText = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        title: const Text('Editar mensaje',
+            style: TextStyle(color: AppColors.textPrimary)),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          maxLines: null,
+          style: const TextStyle(color: AppColors.textPrimary),
+          decoration: const InputDecoration(
+            hintText: 'Editar mensaje...',
+            hintStyle: TextStyle(color: AppColors.textMuted),
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, controller.text.trim()),
+            child: const Text('Guardar'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (newText == null || newText.isEmpty) return;
+
+    final entity = await _findUserMessageEntityByText(message.text);
+    if (entity != null) {
+      await _historyRepo.updateMessageContent(entity.id, newText);
+    }
+    if (!mounted) return;
+    setState(() {
+      _mensajes[index] = ChatMessage(text: newText, isUser: true);
+    });
+  }
+
   // ================= CHAT NORMAL (original) =================
 
   Future<void> _handleNormalChat(String prompt) async {
@@ -516,10 +579,40 @@ class _ChatIaTabState extends State<ChatIaTab> {
               if (!message.isUser && message.text.isEmpty && _awaitingFirstChunk) {
                 return const _TypingIndicatorBubble();
               }
+              if (message.isUser) {
+                return Dismissible(
+                  key: ValueKey(
+                      _mensajes[index].hashCode.toString() + index.toString()),
+                  direction: DismissDirection.endToStart,
+                  background: Container(
+                    alignment: Alignment.centerRight,
+                    padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                    color: Colors.redAccent,
+                    child: const Icon(Icons.delete_outline, color: Colors.white),
+                  ),
+                  onDismissed: (_) async {
+                    final entity =
+                        await _findUserMessageEntityByText(message.text);
+                    if (entity != null) {
+                      await _historyRepo.deleteMessage(entity.id);
+                    }
+                    if (!mounted) return;
+                    setState(() {
+                      _mensajes.removeAt(index);
+                    });
+                  },
+                  child: GestureDetector(
+                    onLongPress: () => _editUserMessage(index, message),
+                    child: ChatBubble(
+                      message: message,
+                      onExecuteCommand: null,
+                    ),
+                  ),
+                );
+              }
               return ChatBubble(
                 message: message,
-                onExecuteCommand:
-                    message.isUser ? null : _executeInTerminal,
+                onExecuteCommand: _executeInTerminal,
               );
             },
           ),
@@ -552,6 +645,12 @@ class _ChatIaTabState extends State<ChatIaTab> {
                       activeColor: AppColors.primary,
                     ),
                   ],
+                ),
+                IconButton(
+                  onPressed: _isSending ? null : _deleteAllChat,
+                  icon: const Icon(Icons.delete_outline),
+                  color: AppColors.textMuted,
+                  tooltip: 'Borrar historial',
                 ),
                 const SizedBox(width: 8),
                 Expanded(
