@@ -9,6 +9,890 @@ part of 'DataBaseEntities.dart';
 // coverage:ignore-file
 // ignore_for_file: duplicate_ignore, non_constant_identifier_names, constant_identifier_names, invalid_use_of_protected_member, unnecessary_cast, prefer_const_constructors, lines_longer_than_80_chars, require_trailing_commas, inference_failure_on_function_invocation, unnecessary_parenthesis, unnecessary_raw_strings, unnecessary_null_checks, join_return_with_assignment, prefer_final_locals, avoid_js_rounded_ints, avoid_positional_boolean_parameters, always_specify_types
 
+extension GetPairKeysCollection on Isar {
+  IsarCollection<PairKeys> get pairKeys => this.collection();
+}
+
+const PairKeysSchema = CollectionSchema(
+  name: r'PairKeys',
+  id: 8312545493435352450,
+  properties: {
+    r'createdAt': PropertySchema(
+      id: 0,
+      name: r'createdAt',
+      type: IsarType.dateTime,
+    ),
+    r'name': PropertySchema(
+      id: 1,
+      name: r'name',
+      type: IsarType.string,
+    ),
+    r'privateKeyPem': PropertySchema(
+      id: 2,
+      name: r'privateKeyPem',
+      type: IsarType.string,
+    ),
+    r'publicKeyOpenSsh': PropertySchema(
+      id: 3,
+      name: r'publicKeyOpenSsh',
+      type: IsarType.string,
+    )
+  },
+  estimateSize: _pairKeysEstimateSize,
+  serialize: _pairKeysSerialize,
+  deserialize: _pairKeysDeserialize,
+  deserializeProp: _pairKeysDeserializeProp,
+  idName: r'id',
+  indexes: {},
+  links: {},
+  embeddedSchemas: {},
+  getId: _pairKeysGetId,
+  getLinks: _pairKeysGetLinks,
+  attach: _pairKeysAttach,
+  version: '3.1.0+1',
+);
+
+int _pairKeysEstimateSize(
+  PairKeys object,
+  List<int> offsets,
+  Map<Type, List<int>> allOffsets,
+) {
+  var bytesCount = offsets.last;
+  bytesCount += 3 + object.name.length * 3;
+  bytesCount += 3 + object.privateKeyPem.length * 3;
+  bytesCount += 3 + object.publicKeyOpenSsh.length * 3;
+  return bytesCount;
+}
+
+void _pairKeysSerialize(
+  PairKeys object,
+  IsarWriter writer,
+  List<int> offsets,
+  Map<Type, List<int>> allOffsets,
+) {
+  writer.writeDateTime(offsets[0], object.createdAt);
+  writer.writeString(offsets[1], object.name);
+  writer.writeString(offsets[2], object.privateKeyPem);
+  writer.writeString(offsets[3], object.publicKeyOpenSsh);
+}
+
+PairKeys _pairKeysDeserialize(
+  Id id,
+  IsarReader reader,
+  List<int> offsets,
+  Map<Type, List<int>> allOffsets,
+) {
+  final object = PairKeys();
+  object.createdAt = reader.readDateTime(offsets[0]);
+  object.id = id;
+  object.name = reader.readString(offsets[1]);
+  object.privateKeyPem = reader.readString(offsets[2]);
+  object.publicKeyOpenSsh = reader.readString(offsets[3]);
+  return object;
+}
+
+P _pairKeysDeserializeProp<P>(
+  IsarReader reader,
+  int propertyId,
+  int offset,
+  Map<Type, List<int>> allOffsets,
+) {
+  switch (propertyId) {
+    case 0:
+      return (reader.readDateTime(offset)) as P;
+    case 1:
+      return (reader.readString(offset)) as P;
+    case 2:
+      return (reader.readString(offset)) as P;
+    case 3:
+      return (reader.readString(offset)) as P;
+    default:
+      throw IsarError('Unknown property with id $propertyId');
+  }
+}
+
+Id _pairKeysGetId(PairKeys object) {
+  return object.id;
+}
+
+List<IsarLinkBase<dynamic>> _pairKeysGetLinks(PairKeys object) {
+  return [];
+}
+
+void _pairKeysAttach(IsarCollection<dynamic> col, Id id, PairKeys object) {
+  object.id = id;
+}
+
+extension PairKeysQueryWhereSort on QueryBuilder<PairKeys, PairKeys, QWhere> {
+  QueryBuilder<PairKeys, PairKeys, QAfterWhere> anyId() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(const IdWhereClause.any());
+    });
+  }
+}
+
+extension PairKeysQueryWhere on QueryBuilder<PairKeys, PairKeys, QWhereClause> {
+  QueryBuilder<PairKeys, PairKeys, QAfterWhereClause> idEqualTo(Id id) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IdWhereClause.between(
+        lower: id,
+        upper: id,
+      ));
+    });
+  }
+
+  QueryBuilder<PairKeys, PairKeys, QAfterWhereClause> idNotEqualTo(Id id) {
+    return QueryBuilder.apply(this, (query) {
+      if (query.whereSort == Sort.asc) {
+        return query
+            .addWhereClause(
+              IdWhereClause.lessThan(upper: id, includeUpper: false),
+            )
+            .addWhereClause(
+              IdWhereClause.greaterThan(lower: id, includeLower: false),
+            );
+      } else {
+        return query
+            .addWhereClause(
+              IdWhereClause.greaterThan(lower: id, includeLower: false),
+            )
+            .addWhereClause(
+              IdWhereClause.lessThan(upper: id, includeUpper: false),
+            );
+      }
+    });
+  }
+
+  QueryBuilder<PairKeys, PairKeys, QAfterWhereClause> idGreaterThan(Id id,
+      {bool include = false}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(
+        IdWhereClause.greaterThan(lower: id, includeLower: include),
+      );
+    });
+  }
+
+  QueryBuilder<PairKeys, PairKeys, QAfterWhereClause> idLessThan(Id id,
+      {bool include = false}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(
+        IdWhereClause.lessThan(upper: id, includeUpper: include),
+      );
+    });
+  }
+
+  QueryBuilder<PairKeys, PairKeys, QAfterWhereClause> idBetween(
+    Id lowerId,
+    Id upperId, {
+    bool includeLower = true,
+    bool includeUpper = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IdWhereClause.between(
+        lower: lowerId,
+        includeLower: includeLower,
+        upper: upperId,
+        includeUpper: includeUpper,
+      ));
+    });
+  }
+}
+
+extension PairKeysQueryFilter
+    on QueryBuilder<PairKeys, PairKeys, QFilterCondition> {
+  QueryBuilder<PairKeys, PairKeys, QAfterFilterCondition> createdAtEqualTo(
+      DateTime value) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'createdAt',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<PairKeys, PairKeys, QAfterFilterCondition> createdAtGreaterThan(
+    DateTime value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'createdAt',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<PairKeys, PairKeys, QAfterFilterCondition> createdAtLessThan(
+    DateTime value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'createdAt',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<PairKeys, PairKeys, QAfterFilterCondition> createdAtBetween(
+    DateTime lower,
+    DateTime upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'createdAt',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+      ));
+    });
+  }
+
+  QueryBuilder<PairKeys, PairKeys, QAfterFilterCondition> idEqualTo(Id value) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'id',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<PairKeys, PairKeys, QAfterFilterCondition> idGreaterThan(
+    Id value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'id',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<PairKeys, PairKeys, QAfterFilterCondition> idLessThan(
+    Id value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'id',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<PairKeys, PairKeys, QAfterFilterCondition> idBetween(
+    Id lower,
+    Id upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'id',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+      ));
+    });
+  }
+
+  QueryBuilder<PairKeys, PairKeys, QAfterFilterCondition> nameEqualTo(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'name',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PairKeys, PairKeys, QAfterFilterCondition> nameGreaterThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'name',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PairKeys, PairKeys, QAfterFilterCondition> nameLessThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'name',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PairKeys, PairKeys, QAfterFilterCondition> nameBetween(
+    String lower,
+    String upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'name',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PairKeys, PairKeys, QAfterFilterCondition> nameStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'name',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PairKeys, PairKeys, QAfterFilterCondition> nameEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'name',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PairKeys, PairKeys, QAfterFilterCondition> nameContains(
+      String value,
+      {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'name',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PairKeys, PairKeys, QAfterFilterCondition> nameMatches(
+      String pattern,
+      {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'name',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PairKeys, PairKeys, QAfterFilterCondition> nameIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'name',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<PairKeys, PairKeys, QAfterFilterCondition> nameIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'name',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<PairKeys, PairKeys, QAfterFilterCondition> privateKeyPemEqualTo(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'privateKeyPem',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PairKeys, PairKeys, QAfterFilterCondition>
+      privateKeyPemGreaterThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'privateKeyPem',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PairKeys, PairKeys, QAfterFilterCondition> privateKeyPemLessThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'privateKeyPem',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PairKeys, PairKeys, QAfterFilterCondition> privateKeyPemBetween(
+    String lower,
+    String upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'privateKeyPem',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PairKeys, PairKeys, QAfterFilterCondition>
+      privateKeyPemStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'privateKeyPem',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PairKeys, PairKeys, QAfterFilterCondition> privateKeyPemEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'privateKeyPem',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PairKeys, PairKeys, QAfterFilterCondition> privateKeyPemContains(
+      String value,
+      {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'privateKeyPem',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PairKeys, PairKeys, QAfterFilterCondition> privateKeyPemMatches(
+      String pattern,
+      {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'privateKeyPem',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PairKeys, PairKeys, QAfterFilterCondition>
+      privateKeyPemIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'privateKeyPem',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<PairKeys, PairKeys, QAfterFilterCondition>
+      privateKeyPemIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'privateKeyPem',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<PairKeys, PairKeys, QAfterFilterCondition>
+      publicKeyOpenSshEqualTo(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'publicKeyOpenSsh',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PairKeys, PairKeys, QAfterFilterCondition>
+      publicKeyOpenSshGreaterThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'publicKeyOpenSsh',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PairKeys, PairKeys, QAfterFilterCondition>
+      publicKeyOpenSshLessThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'publicKeyOpenSsh',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PairKeys, PairKeys, QAfterFilterCondition>
+      publicKeyOpenSshBetween(
+    String lower,
+    String upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'publicKeyOpenSsh',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PairKeys, PairKeys, QAfterFilterCondition>
+      publicKeyOpenSshStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'publicKeyOpenSsh',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PairKeys, PairKeys, QAfterFilterCondition>
+      publicKeyOpenSshEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'publicKeyOpenSsh',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PairKeys, PairKeys, QAfterFilterCondition>
+      publicKeyOpenSshContains(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'publicKeyOpenSsh',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PairKeys, PairKeys, QAfterFilterCondition>
+      publicKeyOpenSshMatches(String pattern, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'publicKeyOpenSsh',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PairKeys, PairKeys, QAfterFilterCondition>
+      publicKeyOpenSshIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'publicKeyOpenSsh',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<PairKeys, PairKeys, QAfterFilterCondition>
+      publicKeyOpenSshIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'publicKeyOpenSsh',
+        value: '',
+      ));
+    });
+  }
+}
+
+extension PairKeysQueryObject
+    on QueryBuilder<PairKeys, PairKeys, QFilterCondition> {}
+
+extension PairKeysQueryLinks
+    on QueryBuilder<PairKeys, PairKeys, QFilterCondition> {}
+
+extension PairKeysQuerySortBy on QueryBuilder<PairKeys, PairKeys, QSortBy> {
+  QueryBuilder<PairKeys, PairKeys, QAfterSortBy> sortByCreatedAt() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'createdAt', Sort.asc);
+    });
+  }
+
+  QueryBuilder<PairKeys, PairKeys, QAfterSortBy> sortByCreatedAtDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'createdAt', Sort.desc);
+    });
+  }
+
+  QueryBuilder<PairKeys, PairKeys, QAfterSortBy> sortByName() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'name', Sort.asc);
+    });
+  }
+
+  QueryBuilder<PairKeys, PairKeys, QAfterSortBy> sortByNameDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'name', Sort.desc);
+    });
+  }
+
+  QueryBuilder<PairKeys, PairKeys, QAfterSortBy> sortByPrivateKeyPem() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'privateKeyPem', Sort.asc);
+    });
+  }
+
+  QueryBuilder<PairKeys, PairKeys, QAfterSortBy> sortByPrivateKeyPemDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'privateKeyPem', Sort.desc);
+    });
+  }
+
+  QueryBuilder<PairKeys, PairKeys, QAfterSortBy> sortByPublicKeyOpenSsh() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'publicKeyOpenSsh', Sort.asc);
+    });
+  }
+
+  QueryBuilder<PairKeys, PairKeys, QAfterSortBy> sortByPublicKeyOpenSshDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'publicKeyOpenSsh', Sort.desc);
+    });
+  }
+}
+
+extension PairKeysQuerySortThenBy
+    on QueryBuilder<PairKeys, PairKeys, QSortThenBy> {
+  QueryBuilder<PairKeys, PairKeys, QAfterSortBy> thenByCreatedAt() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'createdAt', Sort.asc);
+    });
+  }
+
+  QueryBuilder<PairKeys, PairKeys, QAfterSortBy> thenByCreatedAtDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'createdAt', Sort.desc);
+    });
+  }
+
+  QueryBuilder<PairKeys, PairKeys, QAfterSortBy> thenById() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'id', Sort.asc);
+    });
+  }
+
+  QueryBuilder<PairKeys, PairKeys, QAfterSortBy> thenByIdDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'id', Sort.desc);
+    });
+  }
+
+  QueryBuilder<PairKeys, PairKeys, QAfterSortBy> thenByName() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'name', Sort.asc);
+    });
+  }
+
+  QueryBuilder<PairKeys, PairKeys, QAfterSortBy> thenByNameDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'name', Sort.desc);
+    });
+  }
+
+  QueryBuilder<PairKeys, PairKeys, QAfterSortBy> thenByPrivateKeyPem() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'privateKeyPem', Sort.asc);
+    });
+  }
+
+  QueryBuilder<PairKeys, PairKeys, QAfterSortBy> thenByPrivateKeyPemDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'privateKeyPem', Sort.desc);
+    });
+  }
+
+  QueryBuilder<PairKeys, PairKeys, QAfterSortBy> thenByPublicKeyOpenSsh() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'publicKeyOpenSsh', Sort.asc);
+    });
+  }
+
+  QueryBuilder<PairKeys, PairKeys, QAfterSortBy> thenByPublicKeyOpenSshDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'publicKeyOpenSsh', Sort.desc);
+    });
+  }
+}
+
+extension PairKeysQueryWhereDistinct
+    on QueryBuilder<PairKeys, PairKeys, QDistinct> {
+  QueryBuilder<PairKeys, PairKeys, QDistinct> distinctByCreatedAt() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'createdAt');
+    });
+  }
+
+  QueryBuilder<PairKeys, PairKeys, QDistinct> distinctByName(
+      {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'name', caseSensitive: caseSensitive);
+    });
+  }
+
+  QueryBuilder<PairKeys, PairKeys, QDistinct> distinctByPrivateKeyPem(
+      {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'privateKeyPem',
+          caseSensitive: caseSensitive);
+    });
+  }
+
+  QueryBuilder<PairKeys, PairKeys, QDistinct> distinctByPublicKeyOpenSsh(
+      {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'publicKeyOpenSsh',
+          caseSensitive: caseSensitive);
+    });
+  }
+}
+
+extension PairKeysQueryProperty
+    on QueryBuilder<PairKeys, PairKeys, QQueryProperty> {
+  QueryBuilder<PairKeys, int, QQueryOperations> idProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'id');
+    });
+  }
+
+  QueryBuilder<PairKeys, DateTime, QQueryOperations> createdAtProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'createdAt');
+    });
+  }
+
+  QueryBuilder<PairKeys, String, QQueryOperations> nameProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'name');
+    });
+  }
+
+  QueryBuilder<PairKeys, String, QQueryOperations> privateKeyPemProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'privateKeyPem');
+    });
+  }
+
+  QueryBuilder<PairKeys, String, QQueryOperations> publicKeyOpenSshProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'publicKeyOpenSsh');
+    });
+  }
+}
+
+// coverage:ignore-file
+// ignore_for_file: duplicate_ignore, non_constant_identifier_names, constant_identifier_names, invalid_use_of_protected_member, unnecessary_cast, prefer_const_constructors, lines_longer_than_80_chars, require_trailing_commas, inference_failure_on_function_invocation, unnecessary_parenthesis, unnecessary_raw_strings, unnecessary_null_checks, join_return_with_assignment, prefer_final_locals, avoid_js_rounded_ints, avoid_positional_boolean_parameters, always_specify_types
+
 extension GetServerConfigCollection on Isar {
   IsarCollection<ServerConfig> get serverConfigs => this.collection();
 }
@@ -54,7 +938,14 @@ const ServerConfigSchema = CollectionSchema(
   deserializeProp: _serverConfigDeserializeProp,
   idName: r'id',
   indexes: {},
-  links: {},
+  links: {
+    r'keyPair': LinkSchema(
+      id: 4906580313355429282,
+      name: r'keyPair',
+      target: r'PairKeys',
+      single: true,
+    )
+  },
   embeddedSchemas: {},
   getId: _serverConfigGetId,
   getLinks: _serverConfigGetLinks,
@@ -146,12 +1037,13 @@ Id _serverConfigGetId(ServerConfig object) {
 }
 
 List<IsarLinkBase<dynamic>> _serverConfigGetLinks(ServerConfig object) {
-  return [];
+  return [object.keyPair];
 }
 
 void _serverConfigAttach(
     IsarCollection<dynamic> col, Id id, ServerConfig object) {
   object.id = id;
+  object.keyPair.attach(col, col.isar.collection<PairKeys>(), r'keyPair', id);
 }
 
 extension ServerConfigQueryWhereSort
@@ -1061,7 +1953,21 @@ extension ServerConfigQueryObject
     on QueryBuilder<ServerConfig, ServerConfig, QFilterCondition> {}
 
 extension ServerConfigQueryLinks
-    on QueryBuilder<ServerConfig, ServerConfig, QFilterCondition> {}
+    on QueryBuilder<ServerConfig, ServerConfig, QFilterCondition> {
+  QueryBuilder<ServerConfig, ServerConfig, QAfterFilterCondition> keyPair(
+      FilterQuery<PairKeys> q) {
+    return QueryBuilder.apply(this, (query) {
+      return query.link(q, r'keyPair');
+    });
+  }
+
+  QueryBuilder<ServerConfig, ServerConfig, QAfterFilterCondition>
+      keyPairIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.linkLength(r'keyPair', 0, true, 0, true);
+    });
+  }
+}
 
 extension ServerConfigQuerySortBy
     on QueryBuilder<ServerConfig, ServerConfig, QSortBy> {

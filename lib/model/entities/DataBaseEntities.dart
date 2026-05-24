@@ -3,6 +3,17 @@ import 'package:pro_tocol/model/entities/GeneralConfig.dart';
 
 part 'DataBaseEntities.g.dart';
 
+// --- NUEVA ENTIDAD PARA LLAVES ---
+@Collection()
+class PairKeys {
+  Id id = Isar.autoIncrement;
+
+  late String name; // Un nombre para identificar la llave en la UI
+  late String publicKeyOpenSsh;
+  late String privateKeyPem;
+  late DateTime createdAt;
+}
+
 @Collection()
 class ServerConfig implements GeneralConfig {
   Id id = Isar.autoIncrement;
@@ -19,6 +30,10 @@ class ServerConfig implements GeneralConfig {
   String? password;
   @override
   String? keyPairId;
+
+
+  // --- RELACIÓN CON PAIR KEYS ---
+  final keyPair = IsarLink<PairKeys>();
 }
 
 @Collection()

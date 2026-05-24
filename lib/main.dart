@@ -25,7 +25,7 @@ void main() async {
 
   final dir = await getApplicationDocumentsDirectory();
   final isar = await Isar.open(
-    [ServerConfigSchema, AiConfigSchema, ChatMessageEntitySchema,],
+    [ServerConfigSchema, AiConfigSchema, ChatMessageEntitySchema, PairKeysSchema],
     directory: dir.path,
   );
 

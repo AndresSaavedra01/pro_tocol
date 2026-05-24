@@ -1,7 +1,9 @@
 import 'package:get_it/get_it.dart';
 import 'package:isar/isar.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:pro_tocol/controller/KeyController.dart';
 import 'package:pro_tocol/model/repositories/ChatHistoryRepository.dart';
+import 'package:pro_tocol/model/services/SSHService.dart';
 import 'package:xterm/xterm.dart';
 
 // --- DAOs ---
@@ -38,8 +40,13 @@ Future<void> setupDependencies(Isar isar) async {
   final aiConfigDAO = AiConfigDAO(isar);
   final serverConfigDAO = ServerConfigDAO(isar);
 
-  // 2. Servicios
   getIt.registerLazySingleton<AuthService>(() => AuthService());
+  getIt.registerLazySingleton<SSHService>(() => SSHService()); // ¡Nuevo!
+
+  getIt.registerLazySingleton<KeyController>(() => KeyController(
+    isar: isar,
+    sshService: getIt<SSHService>(),
+  ));
 
   // 3. Repositorios
   getIt.registerLazySingleton<FlutterSecureStorage>(() => const FlutterSecureStorage());
@@ -84,4 +91,7 @@ Future<void> setupDependencies(Isar isar) async {
   ));
 
   getIt.registerLazySingleton<ChatHistoryRepository>(() => ChatHistoryRepository(isar));
+
+
+
 }
