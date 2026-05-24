@@ -19,16 +19,19 @@ class DistroLogsPage extends StatefulWidget {
 
   @override
   State<DistroLogsPage> createState() => _DistroLogsPageState();
-  ServerCommandController get _commandController => getIt<ServerCommandController>();
 }
 
 class _DistroLogsPageState extends State<DistroLogsPage> {
+  ServerCommandController get _commandController => getIt<ServerCommandController>();
+
   @override
   Widget build(BuildContext context) {
-    final history = widget._commandController.commandHistoryManager.getHistory();
+    final history = _commandController.commandHistoryManager.getHistory();
     final distroName = widget.activeServer?.distroName ?? widget.activeSession?.distroName ?? 'Linux';
     final packageManager = widget.activeServer?.packageManager ?? widget.activeSession?.packageManager ?? 'unknown';
     final distroIcon = _getDistroIcon(distroName);
+    final hasActiveConnection =
+        widget.activeServer != null || widget.activeSession != null;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -43,13 +46,18 @@ class _DistroLogsPageState extends State<DistroLogsPage> {
           IconButton(
             icon: const Icon(Icons.clear, color: AppColors.error),
             onPressed: () {
-              widget._commandController.commandHistoryManager.clear();
+              _commandController.commandHistoryManager.clear();
               setState(() {});
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(content: Text('Historial limpiado')),
               );
             },
             tooltip: 'Limpiar historial',
+          ),
+          IconButton(
+            icon: const Icon(Icons.refresh, color: AppColors.textPrimary),
+            onPressed: () => setState(() {}),
+            tooltip: 'Actualizar historial',
           ),
         ],
       ),
@@ -62,85 +70,100 @@ class _DistroLogsPageState extends State<DistroLogsPage> {
             colors: [AppColors.background, AppColors.surface.withOpacity(0.1)],
           ),
         ),
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
+        child: hasActiveConnection
+            ? Column(
                 children: [
-                  Row(
-                    children: [
-                      Text(distroIcon, style: const TextStyle(fontSize: 28)),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Row(
                           children: [
-                            Text(
-                              distroName,
-                              style: const TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                                color: AppColors.textPrimary,
+                            Text(distroIcon, style: const TextStyle(fontSize: 28)),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    distroName,
+                                    style: const TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.bold,
+                                      color: AppColors.textPrimary,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    'Package Manager: $packageManager',
+                                    style: const TextStyle(color: AppColors.textSecondary),
+                                  ),
+                                ],
                               ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              'Package Manager: $packageManager',
-                              style: const TextStyle(color: AppColors.textSecondary),
                             ),
                           ],
                         ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  const Divider(color: AppColors.border),
-                  const SizedBox(height: 12),
-                  const Text(
-                    'Command History',
-                    style: TextStyle(
-                      color: AppColors.textPrimary,
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
+                        const SizedBox(height: 16),
+                        const Divider(color: AppColors.border),
+                        const SizedBox(height: 12),
+                        const Text(
+                          'Command History',
+                          style: TextStyle(
+                            color: AppColors.textPrimary,
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
                     ),
+                  ),
+                  Expanded(
+                    child: history.isEmpty
+                        ? const Center(
+                            child: Text(
+                              'No hay comandos en el historial',
+                              style: TextStyle(color: AppColors.textMuted),
+                            ),
+                          )
+                        : ListView.builder(
+                            itemCount: history.length,
+                            itemBuilder: (context, index) {
+                              final command = history[history.length - 1 - index]; // Más reciente primero
+                              return ListTile(
+                                title: Text(
+                                  command,
+                                  style: const TextStyle(color: AppColors.textPrimary),
+                                ),
+                                trailing: const Icon(Icons.copy, color: AppColors.primary),
+                                onTap: () async {
+                                  await Clipboard.setData(ClipboardData(text: command));
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(content: Text('Comando copiado: $command')),
+                                    );
+                                  }
+                                },
+                              );
+                            },
+                          ),
                   ),
                 ],
-              ),
-            ),
-            Expanded(
-              child: history.isEmpty
-                  ? const Center(
-                      child: Text(
-                        'No hay comandos en el historial',
-                        style: TextStyle(color: AppColors.textMuted),
-                      ),
-                    )
-                  : ListView.builder(
-                      itemCount: history.length,
-                      itemBuilder: (context, index) {
-                        final command = history[history.length - 1 - index]; // Más reciente primero
-                        return ListTile(
-                          title: Text(
-                            command,
-                            style: const TextStyle(color: AppColors.textPrimary),
-                          ),
-                          trailing: const Icon(Icons.copy, color: AppColors.primary),
-                          onTap: () async {
-                            await Clipboard.setData(ClipboardData(text: command));
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text('Comando copiado: $command')),
-                              );
-                            }
-                          },
-                        );
-                      },
+              )
+            : const Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.computer_outlined,
+                        size: 64, color: AppColors.textMuted),
+                    SizedBox(height: 16),
+                    Text(
+                      'Conecta un servidor para ver su información de distro',
+                      style: TextStyle(color: AppColors.textMuted, fontSize: 14),
                     ),
-            ),
-          ],
-        ),
+                  ],
+                ),
+              ),
       ),
     );
   }
