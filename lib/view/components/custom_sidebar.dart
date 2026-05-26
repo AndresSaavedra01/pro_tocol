@@ -167,8 +167,8 @@ class CustomSidebar extends StatelessWidget {
         leading: hasStatus
             ? CircleAvatar(radius: 4, backgroundColor: isActive ? AppColors.success : Colors.white24)
             : const CircleAvatar(radius: 4, backgroundColor: Colors.transparent), // Espaciador para alinear
-        title: Text(title, style: TextStyle(color: isActive ? AppColors.primary : AppColors.textPrimary, fontSize: 14, fontWeight: isActive ? FontWeight.bold : FontWeight.normal)),
-        subtitle: subtitle != null ? Text(subtitle, style: const TextStyle(color: AppColors.textMuted, fontSize: 12)) : null,
+        title: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: isActive ? AppColors.primary : AppColors.textPrimary, fontSize: 14, fontWeight: isActive ? FontWeight.bold : FontWeight.normal)),
+        subtitle: subtitle != null ? Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: AppColors.textMuted, fontSize: 12)) : null,
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [

@@ -324,7 +324,7 @@ class _ArchivosTabState extends State<ArchivosTab> {
           children: [
             Padding(
               padding: const EdgeInsets.all(16.0),
-              child: Text(node.name, style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.textMuted)),
+              child: Text(node.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.textMuted)),
             ),
             ListTile(
               leading: const Icon(Icons.download, color: Colors.blueAccent),
@@ -443,7 +443,7 @@ class _ArchivosTabState extends State<ArchivosTab> {
 
     return ListTile(
       leading: Icon(icon, color: color),
-      title: Text(node.name, style: const TextStyle(color: AppColors.textPrimary, fontSize: 14)),
+      title: Text(node.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: AppColors.textPrimary, fontSize: 14)),
       subtitle: Text("${node.permissions} • ${_formatSize(node.sizeInBytes)}",
           style: const TextStyle(color: AppColors.textMuted, fontSize: 11)),
 

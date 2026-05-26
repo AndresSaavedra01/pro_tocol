@@ -92,13 +92,14 @@ class _MonitorTabState extends State<MonitorTab> {
               padding: EdgeInsets.only(bottom: 12),
               child: LinearProgressIndicator(minHeight: 2, color: AppColors.primary, backgroundColor: AppColors.surface),
             ),
-          Row(
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            alignment: WrapAlignment.spaceEvenly,
             children: [
-              Expanded(child: _buildCircleCard(label: 'CPU', percent: cpuVal, centerText: '${cpuVal.toStringAsFixed(1)}%', color: Colors.blue)),
-              const SizedBox(width: 10),
-              Expanded(child: _buildCircleCard(label: 'Memoria', percent: ramPct, centerText: 'Used\n${_mbToReadable(usedRam)}\n${_mbToReadable(totalRam)}\nTotal', color: Colors.purple, smallCenter: true)),
-              const SizedBox(width: 10),
-              Expanded(child: _buildCircleCard(label: 'Disco', percent: diskVal, centerText: 'Used\n$diskStr', color: Colors.orange, smallCenter: true)),
+              SizedBox(width: 105, child: _buildCircleCard(label: 'CPU', percent: cpuVal, centerText: '${cpuVal.toStringAsFixed(1)}%', color: Colors.blue)),
+              SizedBox(width: 105, child: _buildCircleCard(label: 'Memoria', percent: ramPct, centerText: 'Used\n${_mbToReadable(usedRam)}\n${_mbToReadable(totalRam)}\nTotal', color: Colors.purple, smallCenter: true)),
+              SizedBox(width: 105, child: _buildCircleCard(label: 'Disco', percent: diskVal, centerText: 'Used\n$diskStr', color: Colors.orange, smallCenter: true)),
             ],
           ),
           const SizedBox(height: 16),

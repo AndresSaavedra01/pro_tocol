@@ -22,13 +22,13 @@ class IAService {
   String _getEndpointForPersonality(String personality) {
     switch (personality) {
       case 'tatiana':
-        return '/generar/';
+        return '/chat/';
       case 'iberlina':
         return '/generar-iberlina/';
       case 'yousua':
         return '/generar-yousua/';
       default:
-        return '/generar/';
+        return '/chat/';
     }
   }
 

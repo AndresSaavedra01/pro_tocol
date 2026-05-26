@@ -45,12 +45,14 @@ class _ServerPageState extends State<ServerPage> {
       backgroundColor: Colors.transparent, 
       barrierColor: Colors.black.withOpacity(0.6), 
       builder: (context) {
+        final keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
+        final availableHeight = MediaQuery.of(context).size.height - keyboardHeight - 24;
+        final contentHeight = (MediaQuery.of(context).size.height * 0.72).clamp(100.0, availableHeight);
+
         return Padding(
-          padding: EdgeInsets.only(
-            bottom: MediaQuery.of(context).viewInsets.bottom,
-          ),
+          padding: EdgeInsets.only(bottom: keyboardHeight),
           child: Container(
-            height: MediaQuery.of(context).size.height * 0.72,
+            height: contentHeight,
             decoration: const BoxDecoration(
               color: AppColors.surface, 
               borderRadius: BorderRadius.vertical(top: Radius.circular(30)),

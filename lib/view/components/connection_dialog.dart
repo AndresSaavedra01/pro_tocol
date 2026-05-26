@@ -97,31 +97,34 @@ class _ConnectionFormDialogState extends State<ConnectionFormDialog> {
       backgroundColor: const Color(0xFF161A26),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       title: _buildTitle(),
-      content: SingleChildScrollView(
-        child: Form(
-          key: _formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _buildField("Host / IP", _ipController, hint: "192.168.1.1"),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(flex: 3, child: _buildField("Usuario", _userController, hint: "root")),
-                  const SizedBox(width: 12),
-                  Expanded(flex: 2, child: _buildField("Puerto", _portController, hint: "22", isNumber: true)),
-                ],
-              ),
-              const SizedBox(height: 20),
-              _buildAuthSelector(),
-              const SizedBox(height: 16),
-              if (usePassword)
-                _buildField("Contraseña", _passController, hint: "••••••••", isPassword: true)
-              else
-                widget.initialKeyId != null
-                    ? _buildAlreadyHasKeyInfo()
-                    : _buildKeySection(),
-            ],
+      content: SizedBox(
+        width: double.maxFinite,
+        child: SingleChildScrollView(
+          child: Form(
+            key: _formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildField("Host / IP", _ipController, hint: "192.168.1.1"),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(flex: 3, child: _buildField("Usuario", _userController, hint: "root")),
+                    const SizedBox(width: 12),
+                    Expanded(flex: 2, child: _buildField("Puerto", _portController, hint: "22", isNumber: true)),
+                  ],
+                ),
+                const SizedBox(height: 20),
+                _buildAuthSelector(),
+                const SizedBox(height: 16),
+                if (usePassword)
+                  _buildField("Contraseña", _passController, hint: "••••••••", isPassword: true)
+                else
+                  widget.initialKeyId != null
+                      ? _buildAlreadyHasKeyInfo()
+                      : _buildKeySection(),
+              ],
+            ),
           ),
         ),
       ),
