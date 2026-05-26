@@ -186,8 +186,10 @@ class _AiSettingsPageState extends State<AiSettingsPage> {
               ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
               : SingleChildScrollView(
                   padding: const EdgeInsets.all(20),
-                  child: Form(
-                    key: _formKey,
+                  child: SizedBox(
+                    width: double.maxFinite,
+                    child: Form(
+                      key: _formKey,
                     child: Container(
                       padding: const EdgeInsets.all(18),
                       decoration: AppTheme.glassCard,
@@ -243,6 +245,7 @@ class _AiSettingsPageState extends State<AiSettingsPage> {
                     ),
                   ),
                 ),
+                ),
         ),
       ),
     );
@@ -260,10 +263,11 @@ class _AiSettingsPageState extends State<AiSettingsPage> {
 
   Widget _buildProviderDropdown() {
     return DropdownButtonFormField<String>(
+      isExpanded: true,
       value: _provider,
       items: const [
-        DropdownMenuItem(value: _providerOllama, child: Text('Ollama')),
-        DropdownMenuItem(value: _providerGroq, child: Text('Groq')),
+        DropdownMenuItem(value: _providerOllama, child: Text('Ollama', maxLines: 1, overflow: TextOverflow.ellipsis)),
+        DropdownMenuItem(value: _providerGroq, child: Text('Groq', maxLines: 1, overflow: TextOverflow.ellipsis)),
       ],
       onChanged: (value) {
         if (value == null) return;
@@ -283,19 +287,20 @@ class _AiSettingsPageState extends State<AiSettingsPage> {
 
   Widget _buildPersonalityDropdown() {
     return DropdownButtonFormField<String>(
+      isExpanded: true,
       value: _personality,
       items: const [
         DropdownMenuItem(
           value: _personalityTatiana,
-          child: Text('Tatiana — Asistente General'),
+          child: Text('Tatiana — Asistente General', maxLines: 1, overflow: TextOverflow.ellipsis),
         ),
         DropdownMenuItem(
           value: _personalityIberlina,
-          child: Text('Iberlina — Seguridad & Hardening'),
+          child: Text('Iberlina — Seguridad & Hardening', maxLines: 1, overflow: TextOverflow.ellipsis),
         ),
         DropdownMenuItem(
           value: _personalityYousua,
-          child: Text('Yousua — Automatizacion & Scripts'),
+          child: Text('Yousua — Automatizacion & Scripts', maxLines: 1, overflow: TextOverflow.ellipsis),
         ),
       ],
       onChanged: (value) async {
@@ -313,9 +318,10 @@ class _AiSettingsPageState extends State<AiSettingsPage> {
 
   Widget _buildModelDropdown() {
     return DropdownButtonFormField<String>(
+      isExpanded: true,
       value: _models.contains(_selectedModel) ? _selectedModel : null,
       items: _models
-          .map((model) => DropdownMenuItem(value: model, child: Text(model)))
+          .map((model) => DropdownMenuItem(value: model, child: Text(model, maxLines: 1, overflow: TextOverflow.ellipsis)))
           .toList(),
       onChanged: _models.isEmpty
           ? null
