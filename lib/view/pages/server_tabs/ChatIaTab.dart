@@ -39,7 +39,7 @@ class ChatIaTab extends StatefulWidget {
   final String serverIp;
   final ChatIaController? controller;
   final String profileId;
-  final Server? activeServer; // Para ejecutar scripts vía SSH/SFTP
+  final Server? activeServer;
 
   const ChatIaTab({
     super.key,
@@ -58,7 +58,7 @@ class _ChatIaTabState extends State<ChatIaTab> {
   final ScrollController _scrollController = ScrollController();
   bool _isSending = false;
   bool _awaitingFirstChunk = false;
-  bool _isScriptMode = false; // Modo generación de scripts
+  bool _isScriptMode = false;
 
   IAService get _iaService => getIt<IAService>();
   ChatHistoryRepository get _historyRepo => getIt<ChatHistoryRepository>();
@@ -87,9 +87,9 @@ class _ChatIaTabState extends State<ChatIaTab> {
         ];
       } else {
         _mensajes = mensajesDb
-          .map((e) => ChatMessage(
-            text: e.editedContent ?? e.content, isUser: e.role == 'user'))
-          .toList();
+            .map((e) => ChatMessage(
+                text: e.editedContent ?? e.content, isUser: e.role == 'user'))
+            .toList();
       }
     });
     _scrollToBottom();
@@ -148,21 +148,17 @@ class _ChatIaTabState extends State<ChatIaTab> {
     }
   }
 
-  // ================= MODO SCRIPT (nuevo) =================
-
   Future<void> _handleScriptGeneration(String prompt) async {
     setState(() {
       _awaitingFirstChunk = true;
-      _mensajes.add(ChatMessage(text: '', isUser: false)); // placeholder
+      _mensajes.add(ChatMessage(text: '', isUser: false));
     });
     final aiIndex = _mensajes.length - 1;
 
     try {
       final scriptCode = await _iaService.generarScript(prompt);
-
       final assistantText = "He generado tu script:\n\n```bash\n$scriptCode\n```";
 
-      // ¡NUEVO! Guardamos en el historial el script generado por la IA
       await _historyRepo.saveMessage(ChatMessageEntity(
         serverIp: widget.serverIp,
         profileId: widget.profileId,
@@ -205,29 +201,35 @@ class _ChatIaTabState extends State<ChatIaTab> {
       barrierDismissible: false,
       builder: (context) => AlertDialog(
         backgroundColor: AppColors.surface,
-        title: const Text("Script Generado", style: TextStyle(color: AppColors.textPrimary)),
+        title: const Text("Script Generado",
+            style: TextStyle(color: AppColors.textPrimary)),
         content: SingleChildScrollView(
           child: Container(
             padding: const EdgeInsets.all(12.0),
             color: Colors.black54,
             child: Text(
               scriptCode,
-              style: const TextStyle(color: Colors.greenAccent, fontFamily: 'monospace', fontSize: 12),
+              style: const TextStyle(
+                  color: Colors.greenAccent,
+                  fontFamily: 'monospace',
+                  fontSize: 12),
             ),
           ),
         ),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text("Cancelar", style: TextStyle(color: Colors.redAccent))
-          ),
+              child: const Text("Cancelar",
+                  style: TextStyle(color: Colors.redAccent))),
           ElevatedButton.icon(
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
+            style:
+                ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
             icon: const Icon(Icons.play_arrow, color: Colors.white),
-            label: const Text("Ejecutar en Servidor", style: TextStyle(color: Colors.white)),
+            label: const Text("Ejecutar en Servidor",
+                style: TextStyle(color: Colors.white)),
             onPressed: () {
               Navigator.pop(context);
-              _showPasswordDialogAndExecute(scriptCode); // ¡Llamamos al diálogo de contraseña!
+              _showPasswordDialogAndExecute(scriptCode);
             },
           )
         ],
@@ -235,100 +237,113 @@ class _ChatIaTabState extends State<ChatIaTab> {
     );
   }
 
-  // --- NUEVO: Petición de contraseña ---
   void _showPasswordDialogAndExecute(String scriptCode) {
-    final TextEditingController pwdController = TextEditingController();
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        backgroundColor: AppColors.surface,
-        title: const Text("Autenticación Sudo", style: TextStyle(color: AppColors.textPrimary)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text("Se requieren permisos para ejecutar este script. Ingresa tu contraseña:",
-                style: TextStyle(color: AppColors.textMuted)),
-            const SizedBox(height: 12),
-            TextField(
-              controller: pwdController,
-              obscureText: true,
-              style: const TextStyle(color: AppColors.textPrimary),
-              decoration: InputDecoration(
-                hintText: "Contraseña",
-                hintStyle: const TextStyle(color: AppColors.textMuted),
-                filled: true,
-                fillColor: AppColors.surfaceHighlight,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-              ),
+      // ── StatefulBuilder para manejar el controller dentro del diálogo ──
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          final TextEditingController pwdController = TextEditingController();
+          return AlertDialog(
+            backgroundColor: AppColors.surface,
+            title: const Text("Autenticación Sudo",
+                style: TextStyle(color: AppColors.textPrimary)),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                    "Se requieren permisos para ejecutar este script. Ingresa tu contraseña:",
+                    style: TextStyle(color: AppColors.textMuted)),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: pwdController,
+                  obscureText: true,
+                  autofocus: true,
+                  style: const TextStyle(color: AppColors.textPrimary),
+                  decoration: InputDecoration(
+                    hintText: "Contraseña",
+                    hintStyle: const TextStyle(color: AppColors.textMuted),
+                    filled: true,
+                    fillColor: AppColors.surfaceHighlight,
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8)),
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("Cancelar", style: TextStyle(color: Colors.redAccent)),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
-            onPressed: () {
-              final password = pwdController.text;
-              Navigator.pop(context);
-              _executeScriptOnServer(scriptCode, password); // Mandamos script + password
-            },
-            child: const Text("Ejecutar", style: TextStyle(color: Colors.white)),
-          ),
-        ],
+            actions: [
+              TextButton(
+                onPressed: () {
+                  pwdController.dispose();
+                  Navigator.pop(context);
+                },
+                child: const Text("Cancelar",
+                    style: TextStyle(color: Colors.redAccent)),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary),
+                onPressed: () {
+                  final password = pwdController.text;
+                  pwdController.dispose();
+                  Navigator.pop(context);
+                  _executeScriptOnServer(scriptCode, password);
+                },
+                child: const Text("Ejecutar",
+                    style: TextStyle(color: Colors.white)),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
 
-  Future<void> _executeScriptOnServer(String scriptCode, String password) async {
-    if (widget.activeServer?.sshService == null || widget.activeServer!.sshService.sftp == null) {
-      await _addSystemMessage("Error: No hay conexión SSH/SFTP activa con el servidor.");
+  Future<void> _executeScriptOnServer(
+      String scriptCode, String password) async {
+    if (widget.activeServer?.sshService == null ||
+        widget.activeServer!.sshService.sftp == null) {
+      await _addSystemMessage(
+          "Error: No hay conexión SSH/SFTP activa con el servidor.");
       return;
     }
 
     setState(() => _isSending = true);
-    await _addSystemMessage("Iniciando despliegue y ejecución del script en /tmp/scripts...");
+    await _addSystemMessage(
+        "Iniciando despliegue y ejecución del script en /tmp/scripts...");
 
     try {
       final sftp = widget.activeServer!.sshService.sftp!;
       final ssh = widget.activeServer!.sshService;
 
-      // ¡CORRECCIÓN AQUÍ! Creamos la carpeta usando SSH, es inmune a bloqueos.
       await ssh.runSingleCommand("mkdir -p /tmp/scripts");
 
-      // Guardamos el archivo localmente
       final tempDir = await getTemporaryDirectory();
       final fileName = "auto_${DateTime.now().millisecondsSinceEpoch}.sh";
       final tempFile = File('${tempDir.path}/$fileName');
       await tempFile.writeAsString(scriptCode);
 
-      // Subimos por SFTP
       final remotePath = "/tmp/scripts/$fileName";
       await sftp.uploadFile(tempFile.path, remotePath);
 
-      // Damos permisos de ejecución y quitamos retornos de carro de Windows (\r)
-      await ssh.runSingleCommand("sed -i 's/\\r\$//' $remotePath && chmod +x $remotePath");
+      await ssh.runSingleCommand(
+          "sed -i 's/\\r\$//' $remotePath && chmod +x $remotePath");
 
-      // Ejecutamos con la nueva función a prueba de fallos
       final resultado = await ssh.runSudoCommand(remotePath, password);
 
-      await _addSystemMessage("Ejecución Finalizada.\n\nSalida del terminal:\n```text\n$resultado\n```");
+      await _addSystemMessage(
+          "Ejecución Finalizada.\n\nSalida del terminal:\n```text\n$resultado\n```");
 
-      // Limpiamos el archivo local
-      if (await tempFile.exists()) {
-        await tempFile.delete();
-      }
+      if (await tempFile.exists()) await tempFile.delete();
     } catch (e) {
-      await _addSystemMessage("Error durante la ejecución del script:\n$e");
+      await _addSystemMessage(
+          "Error durante la ejecución del script:\n$e");
     } finally {
       if (mounted) setState(() => _isSending = false);
     }
   }
 
-  // --- Refactorizado para que guarde en el historial siempre ---
   Future<void> _addSystemMessage(String text) async {
     await _historyRepo.saveMessage(ChatMessageEntity(
       serverIp: widget.serverIp,
@@ -339,9 +354,7 @@ class _ChatIaTabState extends State<ChatIaTab> {
     ));
 
     if (mounted) {
-      setState(() {
-        _mensajes.add(ChatMessage(text: text, isUser: false));
-      });
+      setState(() => _mensajes.add(ChatMessage(text: text, isUser: false)));
       _scrollToBottom();
     }
   }
@@ -351,9 +364,7 @@ class _ChatIaTabState extends State<ChatIaTab> {
         widget.serverIp, widget.profileId);
     for (final entity in mensajesDb) {
       final display = entity.editedContent ?? entity.content;
-      if (entity.role == 'user' && display == text) {
-        return entity;
-      }
+      if (entity.role == 'user' && display == text) return entity;
     }
     return null;
   }
@@ -364,38 +375,55 @@ class _ChatIaTabState extends State<ChatIaTab> {
     await _cargarHistorial();
   }
 
+  /// Muestra el diálogo de edición de mensaje.
+  /// El [TextEditingController] vive dentro del [StatefulBuilder] del diálogo
+  /// para evitar el crash '_dependents.isEmpty is not true'.
   Future<void> _editUserMessage(int index, ChatMessage message) async {
-    final controller = TextEditingController(text: message.text);
     final newText = await showDialog<String>(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: AppColors.surface,
-        title: const Text('Editar mensaje',
-            style: TextStyle(color: AppColors.textPrimary)),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          maxLines: null,
-          style: const TextStyle(color: AppColors.textPrimary),
-          decoration: const InputDecoration(
-            hintText: 'Editar mensaje...',
-            hintStyle: TextStyle(color: AppColors.textMuted),
-            border: OutlineInputBorder(),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancelar'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, controller.text.trim()),
-            child: const Text('Guardar'),
-          ),
-        ],
-      ),
+      builder: (dialogContext) {
+        // El controller se crea y destruye DENTRO del ciclo de vida del diálogo
+        final editController = TextEditingController(text: message.text);
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: AppColors.surface,
+              title: const Text('Editar mensaje',
+                  style: TextStyle(color: AppColors.textPrimary)),
+              content: TextField(
+                controller: editController,
+                autofocus: true,
+                maxLines: null,
+                style: const TextStyle(color: AppColors.textPrimary),
+                decoration: const InputDecoration(
+                  hintText: 'Editar mensaje...',
+                  hintStyle: TextStyle(color: AppColors.textMuted),
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    editController.dispose();
+                    Navigator.pop(dialogContext);
+                  },
+                  child: const Text('Cancelar'),
+                ),
+                TextButton(
+                  onPressed: () {
+                    final text = editController.text.trim();
+                    editController.dispose();
+                    Navigator.pop(dialogContext, text);
+                  },
+                  child: const Text('Guardar'),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
-    controller.dispose();
+
     if (newText == null || newText.isEmpty) return;
 
     final entity = await _findUserMessageEntityByText(message.text);
@@ -403,12 +431,8 @@ class _ChatIaTabState extends State<ChatIaTab> {
       await _historyRepo.updateMessageContent(entity.id, newText);
     }
     if (!mounted) return;
-    setState(() {
-      _mensajes[index] = ChatMessage(text: newText, isUser: true);
-    });
+    setState(() => _mensajes[index] = ChatMessage(text: newText, isUser: true));
   }
-
-  // ================= CHAT NORMAL (original) =================
 
   Future<void> _handleNormalChat(String prompt) async {
     setState(() {
@@ -420,13 +444,15 @@ class _ChatIaTabState extends State<ChatIaTab> {
     final buffer = StringBuffer();
 
     try {
-      await for (final chunk in _iaService.generateStream(prompt, _mensajes)) {
+      await for (final chunk
+          in _iaService.generateStream(prompt, _mensajes)) {
         if (!mounted) return;
         if (chunk.isEmpty) continue;
         buffer.write(chunk);
         setState(() {
           if (_awaitingFirstChunk) _awaitingFirstChunk = false;
-          _mensajes[aiIndex] = ChatMessage(text: buffer.toString(), isUser: false);
+          _mensajes[aiIndex] =
+              ChatMessage(text: buffer.toString(), isUser: false);
         });
         _scrollToBottom();
       }
@@ -454,19 +480,16 @@ class _ChatIaTabState extends State<ChatIaTab> {
           _awaitingFirstChunk = false;
         });
       }
-      if (mounted) {
-        _drainExternalQueue();
-      }
+      if (mounted) _drainExternalQueue();
     }
   }
-
-  // ================= MÉTODOS AUXILIARES (originales) =================
 
   Future<void> _executeInTerminal(String command) async {
     final trimmed = command.trim();
     if (trimmed.isEmpty) return;
 
-    final isMultiLine = trimmed.contains('\n') || trimmed.contains('\r');
+    final isMultiLine =
+        trimmed.contains('\n') || trimmed.contains('\r');
     if (isMultiLine) {
       final shouldRun = await _confirmMultiLineCommand(trimmed);
       if (!shouldRun) return;
@@ -483,30 +506,29 @@ class _ChatIaTabState extends State<ChatIaTab> {
 
     final result = await showDialog<bool>(
       context: context,
-      builder: (context) {
-        return AlertDialog(
-          backgroundColor: AppColors.surface,
-          title: const Text(
-            'Ejecutar comando de varias lineas',
-            style: TextStyle(color: AppColors.textPrimary),
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        title: const Text(
+          'Ejecutar comando de varias lineas',
+          style: TextStyle(color: AppColors.textPrimary),
+        ),
+        content: const Text(
+          'Este comando tiene varias lineas. Quieres ejecutarlo en la terminal activa?',
+          style: TextStyle(color: AppColors.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancelar'),
           ),
-          content: Text(
-            'Este comando tiene varias lineas. Quieres ejecutarlo en la terminal activa?',
-            style: const TextStyle(color: AppColors.textSecondary),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style:
+                TextButton.styleFrom(foregroundColor: AppColors.primary),
+            child: const Text('Ejecutar'),
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Cancelar'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              style: TextButton.styleFrom(foregroundColor: AppColors.primary),
-              child: const Text('Ejecutar'),
-            ),
-          ],
-        );
-      },
+        ],
+      ),
     );
 
     return result ?? false;
@@ -553,159 +575,165 @@ class _ChatIaTabState extends State<ChatIaTab> {
       );
       return;
     }
-
     ScaffoldMessenger.of(context)
         .showSnackBar(SnackBar(content: Text(fallbackMessage)));
   }
 
-  // ================= BUILD =================
-
   @override
   Widget build(BuildContext context) {
     return Theme(
-        data: ThemeData.dark().copyWith(
-          scaffoldBackgroundColor: AppColors.background,
-          cardColor: AppColors.surface,
-        ),
+      data: ThemeData.dark().copyWith(
+        scaffoldBackgroundColor: AppColors.background,
+        cardColor: AppColors.surface,
+      ),
       child: Column(
-      children: [
-        Expanded(
-          child: ListView.builder(
-            controller: _scrollController,
-            padding: const EdgeInsets.all(12.0),
-            itemCount: _mensajes.length,
-            itemBuilder: (context, index) {
-              final message = _mensajes[index];
-              if (!message.isUser && message.text.isEmpty && _awaitingFirstChunk) {
-                return const _TypingIndicatorBubble();
-              }
-              if (message.isUser) {
-                return Dismissible(
-                  key: ValueKey(
-                      _mensajes[index].hashCode.toString() + index.toString()),
-                  direction: DismissDirection.endToStart,
-                  background: Container(
-                    alignment: Alignment.centerRight,
-                    padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                    color: Colors.redAccent,
-                    child: const Icon(Icons.delete_outline, color: Colors.white),
-                  ),
-                  onDismissed: (_) async {
-                    final entity =
-                        await _findUserMessageEntityByText(message.text);
-                    if (entity != null) {
-                      await _historyRepo.deleteMessage(entity.id);
-                    }
-                    if (!mounted) return;
-                    setState(() {
-                      _mensajes.removeAt(index);
-                    });
-                  },
-                  child: GestureDetector(
-                    onLongPress: () => _editUserMessage(index, message),
-                    child: ChatBubble(
-                      message: message,
-                      onExecuteCommand: null,
+        children: [
+          Expanded(
+            child: ListView.builder(
+              controller: _scrollController,
+              padding: const EdgeInsets.all(12.0),
+              itemCount: _mensajes.length,
+              itemBuilder: (context, index) {
+                final message = _mensajes[index];
+                if (!message.isUser &&
+                    message.text.isEmpty &&
+                    _awaitingFirstChunk) {
+                  return const _TypingIndicatorBubble();
+                }
+                if (message.isUser) {
+                  return Dismissible(
+                    key: ValueKey(_mensajes[index].hashCode.toString() +
+                        index.toString()),
+                    direction: DismissDirection.endToStart,
+                    background: Container(
+                      alignment: Alignment.centerRight,
+                      padding:
+                          const EdgeInsets.symmetric(horizontal: 16.0),
+                      color: Colors.redAccent,
+                      child: const Icon(Icons.delete_outline,
+                          color: Colors.white),
                     ),
-                  ),
+                    onDismissed: (_) async {
+                      final entity = await _findUserMessageEntityByText(
+                          message.text);
+                      if (entity != null) {
+                        await _historyRepo.deleteMessage(entity.id);
+                      }
+                      if (!mounted) return;
+                      setState(() => _mensajes.removeAt(index));
+                    },
+                    child: GestureDetector(
+                      onLongPress: () => _editUserMessage(index, message),
+                      child: ChatBubble(
+                        message: message,
+                        onExecuteCommand: null,
+                      ),
+                    ),
+                  );
+                }
+                return ChatBubble(
+                  message: message,
+                  onExecuteCommand: _executeInTerminal,
                 );
-              }
-              return ChatBubble(
-                message: message,
-                onExecuteCommand: _executeInTerminal,
-              );
-            },
-          ),
-        ),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 10.0),
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            boxShadow: [
-              BoxShadow(
-                offset: const Offset(0, -2),
-                blurRadius: 10,
-                color: Colors.black.withOpacity(0.2),
-              )
-            ],
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-          ),
-          child: SafeArea(
-            child: Row(
-              children: [
-                // Toggle para modo script
-                Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Text("Script",
-                        style: TextStyle(fontSize: 10, color: AppColors.textMuted)),
-                    Switch(
-                      value: _isScriptMode,
-                      onChanged: _isSending ? null : (val) => setState(() => _isScriptMode = val),
-                      activeColor: AppColors.primary,
-                    ),
-                  ],
-                ),
-                IconButton(
-                  onPressed: _isSending ? null : _deleteAllChat,
-                  icon: const Icon(Icons.delete_outline),
-                  color: AppColors.textMuted,
-                  tooltip: 'Borrar historial',
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: TextField(
-                    controller: _textController,
-                    enabled: !_isSending,
-                    decoration: InputDecoration(
-                      hintText: _isScriptMode
-                          ? "Dile qué automatizar..."
-                          : "Pregúntale a la IA...",
-                      hintStyle: const TextStyle(color: AppColors.textMuted),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(30.0),
-                        borderSide: BorderSide.none,
-                      ),
-                      filled: true,
-                      fillColor: AppColors.background,
-                      contentPadding:
-                          const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-                    ),
-                    style: const TextStyle(color: AppColors.textPrimary),
-                    onSubmitted: (_) => _enviarMensaje(),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Material(
-                  color: AppColors.primary,
-                  shape: const CircleBorder(),
-                  elevation: 4,
-                  clipBehavior: Clip.antiAlias,
-                  child: InkWell(
-                    onTap: _isSending ? null : _enviarMensaje,
-                    splashColor: Colors.white.withOpacity(0.1),
-                    highlightColor: Colors.white.withOpacity(0.05),
-                    child: Ink(
-                      child: Padding(
-                        padding: const EdgeInsets.all(12.0),
-                        child: _isSending
-                            ? const SizedBox(
-                                width: 24,
-                                height: 24,
-                                child: CircularProgressIndicator(
-                                    color: Colors.white, strokeWidth: 2))
-                            : const Icon(Icons.send_rounded,
-                                color: Colors.white, size: 24),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
+              },
             ),
           ),
-        ),
-      ],
-      )
+          Container(
+            padding: const EdgeInsets.symmetric(
+                horizontal: 12.0, vertical: 10.0),
+            decoration: BoxDecoration(
+              color: AppColors.surface,
+              boxShadow: [
+                BoxShadow(
+                  offset: const Offset(0, -2),
+                  blurRadius: 10,
+                  color: Colors.black.withOpacity(0.2),
+                )
+              ],
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(20)),
+            ),
+            child: SafeArea(
+              child: Row(
+                children: [
+                  Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text("Script",
+                          style: TextStyle(
+                              fontSize: 10, color: AppColors.textMuted)),
+                      Switch(
+                        value: _isScriptMode,
+                        onChanged: _isSending
+                            ? null
+                            : (val) =>
+                                setState(() => _isScriptMode = val),
+                        activeColor: AppColors.primary,
+                      ),
+                    ],
+                  ),
+                  IconButton(
+                    onPressed: _isSending ? null : _deleteAllChat,
+                    icon: const Icon(Icons.delete_outline),
+                    color: AppColors.textMuted,
+                    tooltip: 'Borrar historial',
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: TextField(
+                      controller: _textController,
+                      enabled: !_isSending,
+                      decoration: InputDecoration(
+                        hintText: _isScriptMode
+                            ? "Dile qué automatizar..."
+                            : "Pregúntale a la IA...",
+                        hintStyle:
+                            const TextStyle(color: AppColors.textMuted),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(30.0),
+                          borderSide: BorderSide.none,
+                        ),
+                        filled: true,
+                        fillColor: AppColors.background,
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 20, vertical: 14),
+                      ),
+                      style:
+                          const TextStyle(color: AppColors.textPrimary),
+                      onSubmitted: (_) => _enviarMensaje(),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Material(
+                    color: AppColors.primary,
+                    shape: const CircleBorder(),
+                    elevation: 4,
+                    clipBehavior: Clip.antiAlias,
+                    child: InkWell(
+                      onTap: _isSending ? null : _enviarMensaje,
+                      splashColor: Colors.white.withOpacity(0.1),
+                      highlightColor: Colors.white.withOpacity(0.05),
+                      child: Ink(
+                        child: Padding(
+                          padding: const EdgeInsets.all(12.0),
+                          child: _isSending
+                              ? const SizedBox(
+                                  width: 24,
+                                  height: 24,
+                                  child: CircularProgressIndicator(
+                                      color: Colors.white, strokeWidth: 2))
+                              : const Icon(Icons.send_rounded,
+                                  color: Colors.white, size: 24),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -726,8 +754,10 @@ class _TypingIndicatorBubble extends StatelessWidget {
     return Align(
       alignment: Alignment.centerLeft,
       child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
-        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+        margin:
+            const EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
+        padding:
+            const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
         decoration: BoxDecoration(
           color: AppColors.surfaceHighlight,
           borderRadius: const BorderRadius.only(
@@ -740,14 +770,16 @@ class _TypingIndicatorBubble extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: const [
             Text('Escribiendo...',
-                style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
+                style:
+                    TextStyle(color: AppColors.textMuted, fontSize: 12)),
             SizedBox(height: 6),
             SizedBox(
               width: 120,
               child: LinearProgressIndicator(
                 minHeight: 2,
                 backgroundColor: AppColors.surface,
-                valueColor: AlwaysStoppedAnimation(AppColors.primary),
+                valueColor:
+                    AlwaysStoppedAnimation(AppColors.primary),
               ),
             ),
           ],
