@@ -19,15 +19,10 @@ import 'ServerPage.dart';
 import 'TempSessionPage.dart';
 import 'DistroLogsPage.dart';
 
-// Los índices del BottomNavigationBar
-// 0 = Inicio/Conexión activa
-// 1 = Distro & Logs
-// 2 = Perfil
 const int _kIdxHome = 0;
 const int _kIdxDistroLogs = 1;
 const int _kIdxProfile = 2;
 
-// Estado interno de la conexión activa (independiente del BottomNav)
 enum _ConnectionState { none, loading, serverConnected, tempConnected }
 
 class WorkspacePage extends StatefulWidget {
@@ -49,10 +44,7 @@ class WorkspacePage extends StatefulWidget {
 }
 
 class _WorkspacePageState extends State<WorkspacePage> {
-  // Índice activo del BottomNavigationBar
   int _bottomNavIndex = _kIdxHome;
-
-  // Estado de la conexión SSH activa
   _ConnectionState _connState = _ConnectionState.none;
 
   ServerConfig? _selectedServer;
@@ -60,6 +52,10 @@ class _WorkspacePageState extends State<WorkspacePage> {
 
   final List<TempSessionConfig> _tempConfigs = [];
   List<ServerConfig> _servers = [];
+
+  // Rastrea qué pestañas del IndexedStack ya fueron construidas al menos una vez
+  // para implementar construcción lazy (solo cuando el usuario las visita).
+  final Set<int> _visitedTabs = {_kIdxHome};
 
   @override
   void initState() {
@@ -71,27 +67,16 @@ class _WorkspacePageState extends State<WorkspacePage> {
     try {
       final servers = await widget._serverRepository
           .getServersByProfileId(widget.profile.id);
-      if (mounted) {
-        setState(() {
-          _servers = servers;
-        });
-      }
+      if (mounted) setState(() => _servers = servers);
     } catch (e) {
       debugPrint('Error cargando servidores: $e');
     }
   }
 
-  // Vuelve a la vista de inicio SIN destruir la conexión activa
   void _goHome() {
-    setState(() {
-      _bottomNavIndex = _kIdxHome;
-      // Solo limpiamos la conexión si realmente no hay ninguna activa
-      // (p.ej. al borrar un servidor). De lo contrario, mantenemos
-      // _selectedServer / _selectedTempSession intactos.
-    });
+    setState(() => _bottomNavIndex = _kIdxHome);
   }
 
-  // Limpia completamente la conexión (sólo para borrado o error)
   void _clearConnection() {
     setState(() {
       _connState = _ConnectionState.none;
@@ -111,9 +96,7 @@ class _WorkspacePageState extends State<WorkspacePage> {
 
     try {
       await widget._connectionController.connectToServer(server);
-      if (mounted) {
-        setState(() => _connState = _ConnectionState.serverConnected);
-      }
+      if (mounted) setState(() => _connState = _ConnectionState.serverConnected);
     } catch (e) {
       if (mounted) {
         _clearConnection();
@@ -141,10 +124,7 @@ class _WorkspacePageState extends State<WorkspacePage> {
         password: config.password,
         keyPairId: config.keyPairId,
       );
-
-      if (mounted) {
-        setState(() => _connState = _ConnectionState.tempConnected);
-      }
+      if (mounted) setState(() => _connState = _ConnectionState.tempConnected);
     } catch (e) {
       if (mounted) {
         _clearConnection();
@@ -225,39 +205,40 @@ class _WorkspacePageState extends State<WorkspacePage> {
             icon: const Icon(Icons.arrow_back, size: 20),
             onPressed: () async {
               await getIt<ProfileController>().signOut();
-              if (context.mounted) {
-                context.go('/');
-              }
+              if (context.mounted) context.go('/');
             },
           )
         ],
       ),
-      // ─── CUERPO: IndexedStack preserva los widgets en memoria ───────────
       body: Container(
         width: double.infinity,
         decoration: AppTheme.mainBackground,
+        // ── IndexedStack mantiene vivos los widgets ya visitados ──────────
         child: IndexedStack(
           index: _bottomNavIndex,
           children: [
-            // Índice 0: Home / conexión activa
+            // Índice 0: Home / conexión activa — siempre se construye
             _buildHomeOrConnectionView(),
-            // Índice 1: Distro & Logs
-            DistroLogsPage(
-              activeServer: _selectedServer != null
-                  ? widget._connectionController
-                      .getActiveServer(_selectedServer!.id)
-                  : null,
-              activeSession: _selectedTempSession != null
-                  ? widget._tempSessionController
-                      .getValidSession(_selectedTempSession!.host)
-                  : null,
-            ),
-            // Índice 2: Perfil
-            UserProfileTab(profile: widget.profile),
+            // Índice 1: Distro & Logs — construcción lazy + null-safe
+            _visitedTabs.contains(_kIdxDistroLogs)
+                ? DistroLogsPage(
+                    activeServer: _selectedServer != null
+                        ? widget._connectionController
+                            .tryGetActiveServer(_selectedServer!.id)
+                        : null,
+                    activeSession: _selectedTempSession != null
+                        ? widget._tempSessionController
+                            .getValidSession(_selectedTempSession!.host)
+                        : null,
+                  )
+                : const SizedBox.shrink(),
+            // Índice 2: Perfil — construcción lazy
+            _visitedTabs.contains(_kIdxProfile)
+                ? UserProfileTab(profile: widget.profile)
+                : const SizedBox.shrink(),
           ],
         ),
       ),
-      // ────────────────────────────────────────────────────────────────────
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _bottomNavIndex,
         backgroundColor: AppColors.background,
@@ -265,7 +246,10 @@ class _WorkspacePageState extends State<WorkspacePage> {
         selectedItemColor: AppColors.primary,
         unselectedItemColor: AppColors.textMuted,
         onTap: (index) {
-          setState(() => _bottomNavIndex = index);
+          setState(() {
+            _visitedTabs.add(index); // marcar como visitada
+            _bottomNavIndex = index;
+          });
         },
         items: const [
           BottomNavigationBarItem(
@@ -279,8 +263,6 @@ class _WorkspacePageState extends State<WorkspacePage> {
     );
   }
 
-  /// Vista de inicio (índice 0 del IndexedStack).
-  /// Muestra loading, ServerPage, TempSessionPage, o el welcome según el estado.
   Widget _buildHomeOrConnectionView() {
     switch (_connState) {
       case _ConnectionState.loading:
@@ -289,7 +271,6 @@ class _WorkspacePageState extends State<WorkspacePage> {
           child: CircularProgressIndicator(color: AppColors.primary),
         );
       case _ConnectionState.serverConnected:
-        // ServerPage permanece vivo gracias al IndexedStack
         return ServerPage(
           key: ValueKey('server_${_selectedServer!.id}'),
           serverConfig: _selectedServer!,
@@ -308,7 +289,6 @@ class _WorkspacePageState extends State<WorkspacePage> {
   String _getAppBarTitle() {
     if (_bottomNavIndex == _kIdxDistroLogs) return 'Distro & Logs';
     if (_bottomNavIndex == _kIdxProfile) return 'Mi Perfil';
-    // Índice home
     switch (_connState) {
       case _ConnectionState.serverConnected:
         return 'Servidor';
@@ -329,8 +309,7 @@ class _WorkspacePageState extends State<WorkspacePage> {
         children: [
           Container(
             width: double.infinity,
-            padding:
-                const EdgeInsets.symmetric(vertical: 40, horizontal: 20),
+            padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 20),
             decoration: AppTheme.glassCard,
             child: Column(
               children: [
@@ -354,8 +333,7 @@ class _WorkspacePageState extends State<WorkspacePage> {
                 const Text(
                   'Usa el menú lateral para gestionar\nservidores y sesiones',
                   textAlign: TextAlign.center,
-                  style:
-                      TextStyle(color: AppColors.textMuted, fontSize: 14),
+                  style: TextStyle(color: AppColors.textMuted, fontSize: 14),
                 ),
               ],
             ),
@@ -419,7 +397,6 @@ class _WorkspacePageState extends State<WorkspacePage> {
                   ._connectionController.sshKeyController
                   .saveManualKey(privKey);
             }
-
             final newServer =
                 await widget._connectionController.createAndLinkServer(
               profileId: widget.profile.id,
@@ -429,7 +406,6 @@ class _WorkspacePageState extends State<WorkspacePage> {
               password: pass,
               keyPairId: finalKeyId,
             );
-
             if (context.mounted) {
               dialogContext.pop();
               await _refreshServers();
@@ -464,14 +440,11 @@ class _WorkspacePageState extends State<WorkspacePage> {
           server.username = user;
           server.password = pass;
           server.port = port;
-
           if (privKey != null && privKey.isNotEmpty) {
             await widget._connectionController.sshKeyController
                 .saveManualKey(privKey);
           }
-
           await widget._connectionController.updateServer(server);
-
           if (context.mounted) {
             dialogContext.pop();
             _refreshServers();
@@ -518,14 +491,12 @@ class _WorkspacePageState extends State<WorkspacePage> {
         onSubmit: (host, user, pass, port, privKey, pubKey) async {
           await widget._tempSessionController
               .disconnectAndRemove(config.host);
-
           setState(() {
             config.host = host;
             config.username = user;
             config.password = pass;
             config.port = port;
           });
-
           if (context.mounted) {
             dialogContext.pop();
             _selectTempSession(config);

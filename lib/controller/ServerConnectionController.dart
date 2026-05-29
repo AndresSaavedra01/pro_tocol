@@ -39,9 +39,7 @@ class ServerConnectionController {
       ..password = password
       ..keyPairId = keyPairId;
 
-    // Guarda el servidor directamente
     await _serverRepository.saveServerConfig(newConfig);
-
     return newConfig;
   }
 
@@ -75,7 +73,6 @@ class ServerConnectionController {
     try {
       final newKeyId = await sshKeyController.generateAndInstallKey(config);
       config.keyPairId = newKeyId;
-
       await updateServer(config);
       await disconnectFromServer(serverId);
     } catch (e) {
@@ -90,7 +87,6 @@ class ServerConnectionController {
   Future<void> connectToServer(ServerConfig config) async {
     final serverId = config.id;
 
-    // Si ya está conectado, no hacemos nada
     if (_activeConnections.containsKey(serverId) &&
         _activeConnections[serverId]!.sshService.isConnected) {
       return;
@@ -108,13 +104,7 @@ class ServerConnectionController {
       await server.sshService.connect(config, privateKeyPem: privateKeyContent);
       _activeConnections[serverId] = server;
 
-      // Detectar información de distro y package manager en segundo plano
       await _detectLinuxDistro(server);
-
-      // NOTA: La lógica de `refreshInstalledAppsInBackground` y `_setSearchResults`
-      // fue movida a ServerAppsController. Deberás llamarlas desde la Fachada o UI
-      // justo después de que este método termine exitosamente.
-
     } catch (e) {
       throw Exception('Fallo al conectar con ${config.host}: $e');
     }
@@ -125,16 +115,23 @@ class ServerConnectionController {
       _activeConnections[serverId]!.sshService.disconnect();
       _activeConnections.remove(serverId);
     }
-    // NOTA: Deberás llamar a `ServerAppsController.disposeServerResources(serverId)`
-    // desde tu orquestador para limpiar la memoria de los notifiers.
   }
 
-  /// Proveedor de acceso seguro al servidor conectado para los demás controladores
+  /// Retorna el servidor activo o lanza excepción si no está conectado.
+  /// Usar solo cuando se garantiza que la conexión ya fue establecida.
   Server getActiveServer(int serverId) {
     final server = _activeConnections[serverId];
     if (server == null || !server.sshService.isConnected) {
       throw Exception('El servidor no está conectado. Conecta primero antes de ejecutar comandos.');
     }
+    return server;
+  }
+
+  /// Versión null-safe: retorna null si no hay conexión activa, sin lanzar excepción.
+  /// Usar en widgets del build() que pueden renderizarse antes de que la conexión esté lista.
+  Server? tryGetActiveServer(int serverId) {
+    final server = _activeConnections[serverId];
+    if (server == null || !server.sshService.isConnected) return null;
     return server;
   }
 
