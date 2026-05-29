@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart'; // NUEVO: Importamos go_router
+import 'package:go_router/go_router.dart';
 
 import 'package:pro_tocol/model/entities/DataBaseEntities.dart';
 import 'package:pro_tocol/model/entities/Profile.dart';
@@ -19,7 +19,16 @@ import 'ServerPage.dart';
 import 'TempSessionPage.dart';
 import 'DistroLogsPage.dart';
 
-enum ViewType { home, serverView, tempSessionView, loading, distroLogs, profileSettings }
+// Los índices del BottomNavigationBar
+// 0 = Inicio/Conexión activa
+// 1 = Distro & Logs
+// 2 = Perfil
+const int _kIdxHome = 0;
+const int _kIdxDistroLogs = 1;
+const int _kIdxProfile = 2;
+
+// Estado interno de la conexión activa (independiente del BottomNav)
+enum _ConnectionState { none, loading, serverConnected, tempConnected }
 
 class WorkspacePage extends StatefulWidget {
   final Profile profile;
@@ -29,8 +38,10 @@ class WorkspacePage extends StatefulWidget {
     required this.profile,
   });
 
-  ServerConnectionController get _connectionController => getIt<ServerConnectionController>();
-  TempSessionController get _tempSessionController => getIt<TempSessionController>();
+  ServerConnectionController get _connectionController =>
+      getIt<ServerConnectionController>();
+  TempSessionController get _tempSessionController =>
+      getIt<TempSessionController>();
   ServerRepository get _serverRepository => getIt<ServerRepository>();
 
   @override
@@ -38,11 +49,15 @@ class WorkspacePage extends StatefulWidget {
 }
 
 class _WorkspacePageState extends State<WorkspacePage> {
+  // Índice activo del BottomNavigationBar
+  int _bottomNavIndex = _kIdxHome;
 
+  // Estado de la conexión SSH activa
+  _ConnectionState _connState = _ConnectionState.none;
 
-  ViewType _currentView = ViewType.home;
   ServerConfig? _selectedServer;
   TempSessionConfig? _selectedTempSession;
+
   final List<TempSessionConfig> _tempConfigs = [];
   List<ServerConfig> _servers = [];
 
@@ -54,7 +69,8 @@ class _WorkspacePageState extends State<WorkspacePage> {
 
   Future<void> _refreshServers() async {
     try {
-      final servers = await widget._serverRepository.getServersByProfileId(widget.profile.id);
+      final servers = await widget._serverRepository
+          .getServersByProfileId(widget.profile.id);
       if (mounted) {
         setState(() {
           _servers = servers;
@@ -65,28 +81,42 @@ class _WorkspacePageState extends State<WorkspacePage> {
     }
   }
 
+  // Vuelve a la vista de inicio SIN destruir la conexión activa
   void _goHome() {
     setState(() {
-      _currentView = ViewType.home;
+      _bottomNavIndex = _kIdxHome;
+      // Solo limpiamos la conexión si realmente no hay ninguna activa
+      // (p.ej. al borrar un servidor). De lo contrario, mantenemos
+      // _selectedServer / _selectedTempSession intactos.
+    });
+  }
+
+  // Limpia completamente la conexión (sólo para borrado o error)
+  void _clearConnection() {
+    setState(() {
+      _connState = _ConnectionState.none;
       _selectedServer = null;
       _selectedTempSession = null;
+      _bottomNavIndex = _kIdxHome;
     });
   }
 
   Future<void> _selectServer(ServerConfig server) async {
     setState(() {
-      _currentView = ViewType.loading;
+      _connState = _ConnectionState.loading;
       _selectedServer = server;
       _selectedTempSession = null;
+      _bottomNavIndex = _kIdxHome;
     });
 
     try {
       await widget._connectionController.connectToServer(server);
-      if (mounted) setState(() => _currentView = ViewType.serverView);
+      if (mounted) {
+        setState(() => _connState = _ConnectionState.serverConnected);
+      }
     } catch (e) {
       if (mounted) {
-        _goHome();
-        // REFACTORIZADO: Push manejado por GoRouter
+        _clearConnection();
         context.push('/error', extra: {
           'message': e.toString(),
           'onRetry': () => context.pop(),
@@ -97,9 +127,10 @@ class _WorkspacePageState extends State<WorkspacePage> {
 
   Future<void> _selectTempSession(TempSessionConfig config) async {
     setState(() {
-      _currentView = ViewType.loading;
+      _connState = _ConnectionState.loading;
       _selectedTempSession = config;
       _selectedServer = null;
+      _bottomNavIndex = _kIdxHome;
     });
 
     try {
@@ -111,11 +142,12 @@ class _WorkspacePageState extends State<WorkspacePage> {
         keyPairId: config.keyPairId,
       );
 
-      if (mounted) setState(() => _currentView = ViewType.tempSessionView);
+      if (mounted) {
+        setState(() => _connState = _ConnectionState.tempConnected);
+      }
     } catch (e) {
       if (mounted) {
-        _goHome();
-        // REFACTORIZADO: Push manejado por GoRouter
+        _clearConnection();
         context.push('/error', extra: {
           'message': e.toString(),
           'onRetry': () => context.pop(),
@@ -130,45 +162,43 @@ class _WorkspacePageState extends State<WorkspacePage> {
       backgroundColor: AppColors.background,
       drawer: CustomSidebar(
         servers: _servers,
-        tempSessions: _tempConfigs.map((c) => ServerConfig()
-          ..host = c.host
-          ..username = c.username
-          ..id = c.host.hashCode
-        ).toList(),
-
+        tempSessions: _tempConfigs
+            .map((c) => ServerConfig()
+              ..host = c.host
+              ..username = c.username
+              ..id = c.host.hashCode)
+            .toList(),
         activeServer: _selectedServer,
         activeTempSession: _selectedTempSession != null
-            ? (ServerConfig()..host = _selectedTempSession!.host..id = _selectedTempSession!.host.hashCode)
+            ? (ServerConfig()
+              ..host = _selectedTempSession!.host
+              ..id = _selectedTempSession!.host.hashCode)
             : null,
-
         onAddServer: () => _showServerDialog(context),
         onSelectServer: _selectServer,
         onEditServer: (s) => _showEditServerDialog(context, s),
         onDeleteServer: (s) {
           _confirmDelete(context, s.host, () async {
             await widget._connectionController.deleteServer(s.id);
-            if (_selectedServer?.id == s.id) _goHome();
+            if (_selectedServer?.id == s.id) _clearConnection();
             _refreshServers();
           });
         },
-
         onAddTempSession: () => _showTempSessionDialog(context),
         onSelectTempSession: (s) {
           final config = _tempConfigs.firstWhere((c) => c.host == s.host);
           _selectTempSession(config);
         },
-
         onEditTempSession: (s) {
           final config = _tempConfigs.firstWhere((c) => c.host == s.host);
           _showEditTempSessionDialog(context, config);
         },
-
         onDeleteTempSession: (s) {
           _confirmDelete(context, s.host, () async {
             await widget._tempSessionController.disconnectAndRemove(s.host);
             setState(() {
               _tempConfigs.removeWhere((c) => c.host == s.host);
-              if (_selectedTempSession?.host == s.host) _goHome();
+              if (_selectedTempSession?.host == s.host) _clearConnection();
             });
           });
         },
@@ -181,7 +211,8 @@ class _WorkspacePageState extends State<WorkspacePage> {
           child: Text(
             _getAppBarTitle(),
             key: ValueKey<String>(_getAppBarTitle()),
-            style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+            style: const TextStyle(
+                fontWeight: FontWeight.bold, color: AppColors.textPrimary),
           ),
         ),
         iconTheme: const IconThemeData(color: AppColors.textPrimary),
@@ -201,69 +232,93 @@ class _WorkspacePageState extends State<WorkspacePage> {
           )
         ],
       ),
+      // ─── CUERPO: IndexedStack preserva los widgets en memoria ───────────
       body: Container(
         width: double.infinity,
         decoration: AppTheme.mainBackground,
-        child: AnimatedSwitcher(
-          duration: const Duration(milliseconds: 400),
-          child: _buildMainContent(),
+        child: IndexedStack(
+          index: _bottomNavIndex,
+          children: [
+            // Índice 0: Home / conexión activa
+            _buildHomeOrConnectionView(),
+            // Índice 1: Distro & Logs
+            DistroLogsPage(
+              activeServer: _selectedServer != null
+                  ? widget._connectionController
+                      .getActiveServer(_selectedServer!.id)
+                  : null,
+              activeSession: _selectedTempSession != null
+                  ? widget._tempSessionController
+                      .getValidSession(_selectedTempSession!.host)
+                  : null,
+            ),
+            // Índice 2: Perfil
+            UserProfileTab(profile: widget.profile),
+          ],
         ),
       ),
+      // ────────────────────────────────────────────────────────────────────
       bottomNavigationBar: BottomNavigationBar(
+        currentIndex: _bottomNavIndex,
         backgroundColor: AppColors.background,
         type: BottomNavigationBarType.fixed,
         selectedItemColor: AppColors.primary,
         unselectedItemColor: AppColors.textMuted,
-        onTap: (index) async {
-          if (index == 0) _goHome();
-          if (index == 1) setState(() => _currentView = ViewType.distroLogs);
-          if (index == 2) setState(() => _currentView = ViewType.profileSettings); 
+        onTap: (index) {
+          setState(() => _bottomNavIndex = index);
         },
         items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home_outlined), label: 'Inicio'),
-          BottomNavigationBarItem(icon: Icon(Icons.history, size: 20), label: 'Distro & Logs'),
-          BottomNavigationBarItem(icon: Icon(Icons.person_outline), label: 'Perfil'),
+          BottomNavigationBarItem(
+              icon: Icon(Icons.home_outlined), label: 'Inicio'),
+          BottomNavigationBarItem(
+              icon: Icon(Icons.history, size: 20), label: 'Distro & Logs'),
+          BottomNavigationBarItem(
+              icon: Icon(Icons.person_outline), label: 'Perfil'),
         ],
       ),
     );
   }
 
-  Widget _buildMainContent() {
-    switch (_currentView) {
-      case ViewType.loading:
+  /// Vista de inicio (índice 0 del IndexedStack).
+  /// Muestra loading, ServerPage, TempSessionPage, o el welcome según el estado.
+  Widget _buildHomeOrConnectionView() {
+    switch (_connState) {
+      case _ConnectionState.loading:
         return const Center(
+          key: ValueKey('loading'),
           child: CircularProgressIndicator(color: AppColors.primary),
         );
-      case ViewType.serverView:
+      case _ConnectionState.serverConnected:
+        // ServerPage permanece vivo gracias al IndexedStack
         return ServerPage(
           key: ValueKey('server_${_selectedServer!.id}'),
           serverConfig: _selectedServer!,
         );
-      case ViewType.tempSessionView:
+      case _ConnectionState.tempConnected:
         return TempSessionPage(
           key: ValueKey('temp_${_selectedTempSession!.host}'),
           tempConfig: _selectedTempSession!,
         );
-      case ViewType.distroLogs:
-        return DistroLogsPage(
-          activeServer: _selectedServer != null ? widget._connectionController.getActiveServer(_selectedServer!.id) : null,
-          activeSession: _selectedTempSession != null ? widget._tempSessionController.getValidSession(_selectedTempSession!.host) : null,
-        );
-      case ViewType.profileSettings:
-        return UserProfileTab(profile: widget.profile);
-      case ViewType.home:
+      case _ConnectionState.none:
       default:
         return _buildWelcomeView();
     }
   }
 
   String _getAppBarTitle() {
-    if (_currentView == ViewType.serverView) return "Servidor";
-    if (_currentView == ViewType.tempSessionView) return "Terminal";
-    if (_currentView == ViewType.loading) return "Conectando...";
-    if (_currentView == ViewType.distroLogs) return "Distro & Logs";
-    if (_currentView == ViewType.profileSettings) return "Mi Perfil";
-    return "Inicio";
+    if (_bottomNavIndex == _kIdxDistroLogs) return 'Distro & Logs';
+    if (_bottomNavIndex == _kIdxProfile) return 'Mi Perfil';
+    // Índice home
+    switch (_connState) {
+      case _ConnectionState.serverConnected:
+        return 'Servidor';
+      case _ConnectionState.tempConnected:
+        return 'Terminal';
+      case _ConnectionState.loading:
+        return 'Conectando...';
+      default:
+        return 'Inicio';
+    }
   }
 
   Widget _buildWelcomeView() {
@@ -274,24 +329,33 @@ class _WorkspacePageState extends State<WorkspacePage> {
         children: [
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 20),
+            padding:
+                const EdgeInsets.symmetric(vertical: 40, horizontal: 20),
             decoration: AppTheme.glassCard,
             child: Column(
               children: [
                 const CircleAvatar(
                   radius: 35,
                   backgroundColor: AppColors.primary,
-                  child: Icon(Icons.person, color: AppColors.textPrimary, size: 40),
+                  child: Icon(Icons.person,
+                      color: AppColors.textPrimary, size: 40),
                 ),
                 const SizedBox(height: 20),
-                const Text('¡Bienvenido!', style: TextStyle(color: AppColors.textPrimary, fontSize: 24, fontWeight: FontWeight.bold)),
+                const Text('¡Bienvenido!',
+                    style: TextStyle(
+                        color: AppColors.textPrimary,
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold)),
                 const SizedBox(height: 8),
-                Text('Perfil: ${widget.profile.profileName}', style: const TextStyle(color: AppColors.textSecondary, fontSize: 16)),
+                Text('Perfil: ${widget.profile.profileName}',
+                    style: const TextStyle(
+                        color: AppColors.textSecondary, fontSize: 16)),
                 const SizedBox(height: 20),
                 const Text(
                   'Usa el menú lateral para gestionar\nservidores y sesiones',
                   textAlign: TextAlign.center,
-                  style: TextStyle(color: AppColors.textMuted, fontSize: 14),
+                  style:
+                      TextStyle(color: AppColors.textMuted, fontSize: 14),
                 ),
               ],
             ),
@@ -301,31 +365,45 @@ class _WorkspacePageState extends State<WorkspacePage> {
     );
   }
 
-  void _confirmDelete(BuildContext context, String itemName, VoidCallback onConfirm) {
+  void _confirmDelete(
+      BuildContext context, String itemName, VoidCallback onConfirm) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: AppColors.dialogDark,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: const BorderSide(color: AppColors.border)),
-        title: const Text('¿Eliminar conexión?', style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold)),
-        content: Text('¿Estás seguro de que deseas eliminar "$itemName"? Esta acción no se puede deshacer.', style: const TextStyle(color: AppColors.textSecondary)),
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: const BorderSide(color: AppColors.border)),
+        title: const Text('¿Eliminar conexión?',
+            style: TextStyle(
+                color: AppColors.textPrimary,
+                fontWeight: FontWeight.bold)),
+        content: Text(
+            '¿Estás seguro de que deseas eliminar "$itemName"? Esta acción no se puede deshacer.',
+            style: const TextStyle(color: AppColors.textSecondary)),
         actions: [
           TextButton(
-            onPressed: () => context.pop(), // REFACTORIZADO
-            child: const Text('Cancelar', style: TextStyle(color: AppColors.textMuted)),
+            onPressed: () => context.pop(),
+            child: const Text('Cancelar',
+                style: TextStyle(color: AppColors.textMuted)),
           ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
+            style:
+                ElevatedButton.styleFrom(backgroundColor: AppColors.error),
             onPressed: () {
-              context.pop(); // REFACTORIZADO
+              context.pop();
               onConfirm();
             },
-            child: const Text('Eliminar', style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold)),
+            child: const Text('Eliminar',
+                style: TextStyle(
+                    color: AppColors.textPrimary,
+                    fontWeight: FontWeight.bold)),
           ),
         ],
       ),
     );
   }
+
   void _showServerDialog(BuildContext context) {
     showDialog(
       context: context,
@@ -333,20 +411,17 @@ class _WorkspacePageState extends State<WorkspacePage> {
         title: 'Crear Servidor',
         subtitle: 'Se guardará en Isar y se conectará ahora',
         buttonText: 'Guardar y Conectar',
-        // ACTUALIZACIÓN: Ahora recibimos 6 parámetros (añadido pubKey)
         onSubmit: (host, user, pass, port, privKey, pubKey) async {
           try {
             String? finalKeyId;
-
-            // Si el usuario proporcionó una llave privada (ya sea pegada o por archivo)
             if (privKey != null && privKey.isNotEmpty) {
-              // Guardamos la llave privada.
-              // Nota: Si quieres guardar la pública explícitamente, podrías modificar saveManualKey
-              // para aceptar ambas, pero con la privada ya podemos derivar la pública.
-              finalKeyId = await widget._connectionController.sshKeyController.saveManualKey(privKey);
+              finalKeyId = await widget
+                  ._connectionController.sshKeyController
+                  .saveManualKey(privKey);
             }
 
-            final newServer = await widget._connectionController.createAndLinkServer(
+            final newServer =
+                await widget._connectionController.createAndLinkServer(
               profileId: widget.profile.id,
               host: host,
               username: user,
@@ -383,18 +458,16 @@ class _WorkspacePageState extends State<WorkspacePage> {
         initialHost: server.host,
         initialUser: server.username,
         initialPass: server.password,
-        // PASAMOS LOS VALORES INICIALES QUE AHORA SOPORTA EL DIALOG
         initialPort: server.port,
-
         onSubmit: (host, user, pass, port, privKey, pubKey) async {
           server.host = host;
           server.username = user;
           server.password = pass;
           server.port = port;
 
-          // Si se ingresó una llave nueva (privada)
           if (privKey != null && privKey.isNotEmpty) {
-            final newKeyId = await widget._connectionController.sshKeyController.saveManualKey(privKey);
+            await widget._connectionController.sshKeyController
+                .saveManualKey(privKey);
           }
 
           await widget._connectionController.updateServer(server);
@@ -415,15 +488,12 @@ class _WorkspacePageState extends State<WorkspacePage> {
         title: 'Nueva Sesión Temporal',
         subtitle: 'Los datos no se guardarán al cerrar la app',
         buttonText: 'Conectar Ahora',
-        // ACTUALIZACIÓN FIRMA
         onSubmit: (host, user, pass, port, privKey, pubKey) async {
           final config = TempSessionConfig(
             host: host,
             username: user,
             password: pass,
             port: port,
-            // Si tu TempSessionConfig soporta llaves, pásalas aquí:
-            // privateKey: privKey,
           );
           setState(() => _tempConfigs.add(config));
           dialogContext.pop();
@@ -433,7 +503,8 @@ class _WorkspacePageState extends State<WorkspacePage> {
     );
   }
 
-  void _showEditTempSessionDialog(BuildContext context, TempSessionConfig config) {
+  void _showEditTempSessionDialog(
+      BuildContext context, TempSessionConfig config) {
     showDialog(
       context: context,
       builder: (dialogContext) => ConnectionFormDialog(
@@ -444,9 +515,9 @@ class _WorkspacePageState extends State<WorkspacePage> {
         initialUser: config.username,
         initialPass: config.password,
         initialPort: config.port,
-
         onSubmit: (host, user, pass, port, privKey, pubKey) async {
-          await widget._tempSessionController.disconnectAndRemove(config.host);
+          await widget._tempSessionController
+              .disconnectAndRemove(config.host);
 
           setState(() {
             config.host = host;
