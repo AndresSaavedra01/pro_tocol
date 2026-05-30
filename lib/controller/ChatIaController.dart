@@ -138,10 +138,10 @@ class ChatIaController extends ChangeNotifier {
           isToolCall = true;
           commandToRun = chunk['comando'];
           toolCallId = chunk['tool_call_id'];
-          break; // Cortamos este stream para actuar
+          break; // Cortamos este stream para actuar inmediatamente
         }
 
-        // TEXTO NORMAL: La IA está hablando
+        // TEXTO NORMAL: La IA está hablando / respondiendo
         if (chunk.containsKey('respuesta')) {
           buffer.write(chunk['respuesta']);
           awaitingFirstChunk = false;
@@ -152,18 +152,35 @@ class ChatIaController extends ChangeNotifier {
         }
       }
 
-      // SI LA IA PIDIÓ UN COMANDO, LO EJECUTAMOS
+      // CASO A: SI LA IA PIDIÓ UN COMANDO, LO EJECUTAMOS
       if (isToolCall && commandToRun != null) {
 
-        // Damos un pequeño feedback en la UI de que la IA está trabajando
         mensajes[aiIndex] = ChatMessage(text: "🔍 Ejecutando: $commandToRun...", isUser: false);
         notifyListeners();
 
         String toolResult = "";
         try {
-          if (activeServer?.sshService != null && activeServer!.sshService!.isConnected) {
-            toolResult = await activeServer!.sshService!.runSingleCommand(commandToRun);
-            if (toolResult.isEmpty) toolResult = "El comando se ejecutó pero no devolvió ninguna salida (stdout vacío).";
+          final sshService = activeServer?.sshService;
+
+          if (sshService != null && sshService.isConnected) {
+            String cmd = commandToRun!.trim();
+
+            // Interceptamos comandos sudo
+            if (cmd.startsWith("sudo ")) {
+              final password = sshService.config?.password;
+              if (password != null && password.isNotEmpty) {
+                final cmdWithoutSudo = cmd.substring(5).trim();
+                toolResult = await sshService.runSudoCommand(cmdWithoutSudo, password);
+              } else {
+                toolResult = "Error de permisos: El comando requiere 'sudo', pero no hay una contraseña guardada.";
+              }
+            } else {
+              toolResult = await sshService.runSingleCommand(cmd);
+            }
+
+            if (toolResult.isEmpty) {
+              toolResult = "El comando se ejecutó pero no devolvió ninguna salida (stdout vacío).";
+            }
           } else {
             toolResult = "Error: El servidor SSH no está conectado.";
           }
@@ -171,9 +188,7 @@ class ChatIaController extends ChangeNotifier {
           toolResult = "Error al ejecutar el comando: $e";
         }
 
-        // --- ACTUALIZAR EL HISTORIAL DE LA API PARA LA 2DA VUELTA ---
-
-        // A) Lo que la IA pidió (Con tipado explícito)
+        // --- ACTUALIZAR EL HISTORIAL DE LA API PARA LA SIGUIENTE VUELTA ---
         apiHistory.add(<String, dynamic>{
           "role": "assistant",
           "content": null,
@@ -186,24 +201,25 @@ class ChatIaController extends ChangeNotifier {
           ]
         });
 
-        // B) El resultado que obtuvo nuestra app (Con tipado explícito)
         apiHistory.add(<String, dynamic>{
           "role": "tool",
           "tool_call_id": toolCallId,
           "content": toolResult
         });
 
-        // Reseteamos la burbuja visual y volvemos a llamar a la IA (Recursividad)
         mensajes[aiIndex] = ChatMessage(text: "🧠 Analizando resultados...", isUser: false);
         notifyListeners();
 
-        // La IA recibe el historial actualizado y responde definitivamente
+        // Llamada recursiva: Volvemos a enviar todo el historial con el resultado del comando a la IA
         await _processAgenticStream(aiIndex, apiHistory, contextoServidor, onError);
-        return; // Salimos de la ejecución actual para no duplicar procesos
+        return; // Salimos de esta iteración de la pila
 
       } else {
-        // SI NO FUE UNA HERRAMIENTA, el stream terminó normalmente. Guardamos en BD.
-        await _saveMessageToDb('assistant', buffer.toString());
+        // CASO B: EL STREAM TERMINÓ NORMALMENTE (Sin llamadas a comandos)
+        // Esto significa que la IA ya terminó de razonar y esta es su respuesta final de texto.
+        if (buffer.isNotEmpty) {
+          await _saveMessageToDb('assistant', buffer.toString());
+        }
       }
 
     } catch (e) {
@@ -212,7 +228,7 @@ class ChatIaController extends ChangeNotifier {
       mensajes[aiIndex] = ChatMessage(text: errorText, isUser: false);
       if (onError != null) onError(e);
     } finally {
-      if (!isToolCall) { // Solo finalizamos el proceso si NO estamos a mitad de una herramienta
+      if (!isToolCall) {
         isSending = false;
         awaitingFirstChunk = false;
         notifyListeners();
