@@ -32,66 +32,43 @@ class IAService {
     }
   }
 
-  Stream<String> generateStream(String prompt, List<ChatMessage> historial) async* {
+  Stream<Map<String, dynamic>> generateStream(List<Map<String, dynamic>> historialMap, {String? contextoServidor}) async* {
     final config = await _configRepository.getConfig() ?? AiConfig();
-    final token = await _configRepository.getToken();
 
-    // Mapeamos el historial al formato que espera el Backend
-    final historialMap = historial.map((m) => {
-      'role': m.isUser ? 'user' : 'assistant',
-      'content': m.text,
-    }).toList();
-
-    // El endpoint final
-    final endpoint = _getEndpointForPersonality(config.iaPersonality);
-    final url = Uri.parse('$_baseUrl$endpoint');
-
-    final request = http.Request('POST', url)
+    final request = http.Request('POST', Uri.parse('$_baseUrl${_getEndpointForPersonality(config.iaPersonality)}'))
       ..headers.addAll({
         'Content-Type': 'application/json',
-        'X-API-Key': token?.isNotEmpty == true ? token! : _apiKey,
+        'X-API-Key': _apiKey,
       })
       ..body = jsonEncode({
         'historial': historialMap,
         'modelo': config.model,
+        'contexto_servidor': contextoServidor, // Pasamos el contexto del servidor a la IA
       });
 
     final client = http.Client();
 
     try {
       final response = await client.send(request).timeout(
-        const Duration(seconds: 20),
-        onTimeout: () => throw TimeoutException('El servidor en la nube no respondió.'),
+        const Duration(seconds: 40), // Aumentamos el timeout porque la IA puede tardar pensando
+        onTimeout: () => throw TimeoutException('El servidor de IA no respondió.'),
       );
-
-      if (response.statusCode == 403) {
-        throw Exception('Error de autenticación: API Key inválida.');
-      }
 
       if (response.statusCode != 200) {
         throw HttpException('Error del servidor: ${response.statusCode}');
       }
 
-      final stream = response.stream
-          .transform(utf8.decoder)
-          .transform(const LineSplitter());
+      final stream = response.stream.transform(utf8.decoder).transform(const LineSplitter());
 
       await for (final line in stream) {
         if (line.isEmpty) continue;
         try {
           final jsonResponse = jsonDecode(line);
-          if (jsonResponse.containsKey('respuesta')) {
-            yield jsonResponse['respuesta'].toString();
-          } else if (jsonResponse.containsKey('error')) {
-            throw Exception(jsonResponse['error']);
-          }
+          yield jsonResponse; // Devolvemos el Map completo (puede ser texto o acción)
         } catch (e) {
-          // Ignorar errores de parsing en fragmentos incompletos
-          continue;
+          continue; // Ignorar fragmentos rotos
         }
       }
-    } on SocketException {
-      throw Exception('Error de conexión: No se pudo alcanzar el servidor en la nube.');
     } finally {
       client.close();
     }
@@ -110,6 +87,7 @@ class IAService {
       'llama-3.1-8b-instant',
     ];
   }
+
   Future<String> generarScript(String prompt) async {
     final config = await _configRepository.getConfig() ?? AiConfig();
     final token = await _configRepository.getToken();

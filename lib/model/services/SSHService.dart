@@ -54,9 +54,13 @@ class SSHService {
   }
 
   Future<String> runSingleCommand(String command) async {
-    if (_client == null) return 'Error: Desconectado';
-    final result = await _client!.run(command);
-    return utf8.decode(result).trim();
+    if (_client == null) return 'Error: Cliente desconectado';
+    try {
+      final result = await _client!.run(command);
+      return utf8.decode(result).trim();
+    } catch (e) {
+      return 'Error al ejecutar: $e';
+    }
   }
 
   Future<ServerMetrics> fetchMetrics() async {

@@ -8,7 +8,19 @@ class ChatBubble extends StatelessWidget {
   final ChatMessage message;
   final void Function(String command)? onExecuteCommand;
 
-  const ChatBubble({super.key, required this.message, this.onExecuteCommand});
+  // Nuevos parámetros para soportar la IA Agéntica y edición
+  final bool isSystemStatus;
+  final Function(String)? onEditSubmitted;
+  final VoidCallback? onDelete;
+
+  const ChatBubble({
+    super.key,
+    required this.message,
+    this.onExecuteCommand,
+    this.isSystemStatus = false,
+    this.onEditSubmitted,
+    this.onDelete,
+  });
 
   static final RegExp _codeBlockRegex = RegExp(r'```[\w]*\n([\s\S]*?)\n```');
 
@@ -16,16 +28,64 @@ class ChatBubble extends StatelessWidget {
     Clipboard.setData(ClipboardData(text: message.text));
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text('Comando copiado al portapapeles 📋'),
+        content: Text('Copiado al portapapeles 📋'),
         duration: Duration(seconds: 2),
+      ),
+    );
+  }
+
+  void _showEditDialog(BuildContext context) {
+    final TextEditingController controller = TextEditingController(text: message.text);
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        title: const Text('Editar mensaje', style: TextStyle(color: AppColors.textPrimary)),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          style: const TextStyle(color: AppColors.textPrimary),
+          decoration: const InputDecoration(border: OutlineInputBorder()),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
+          TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+                if (onEditSubmitted != null && controller.text.trim().isNotEmpty) {
+                  onEditSubmitted!(controller.text.trim());
+                }
+              },
+              child: const Text('Guardar')
+          ),
+        ],
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    // ESTILOS VISUALES DEPENDIENDO DEL TIPO DE MENSAJE
+    final bgColor = isSystemStatus
+        ? Colors.transparent
+        : message.isUser
+        ? AppColors.primary.withOpacity(0.2)
+        : AppColors.surfaceHighlight;
+
+    final borderColor = isSystemStatus
+        ? AppColors.background.withOpacity(0.5)
+        : Colors.transparent;
+
+    final textColor = isSystemStatus
+        ? AppColors.textMuted
+        : Colors.white;
+
     final styleSheet = MarkdownStyleSheet(
-      p: const TextStyle(color: Colors.white, fontSize: 15),
+      p: TextStyle(
+        color: textColor,
+        fontSize: isSystemStatus ? 13 : 15,
+        fontStyle: isSystemStatus ? FontStyle.italic : FontStyle.normal,
+      ),
       code: TextStyle(
         backgroundColor: Colors.black,
         color: Colors.greenAccent[400],
@@ -37,59 +97,54 @@ class ChatBubble extends StatelessWidget {
       ),
     );
 
+    Widget bubbleContent = Container(
+      margin: const EdgeInsets.symmetric(vertical: 6.0),
+      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+      decoration: BoxDecoration(
+        color: bgColor,
+        border: Border.all(color: borderColor, width: 1),
+        borderRadius: BorderRadius.only(
+          topLeft: const Radius.circular(16),
+          topRight: const Radius.circular(16),
+          bottomLeft: message.isUser ? const Radius.circular(16) : const Radius.circular(4),
+          bottomRight: message.isUser ? const Radius.circular(4) : const Radius.circular(16),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: _buildContent(context, styleSheet),
+      ),
+    );
+
+    // Si es del usuario, permitimos gestos para editar (Long Press) y borrar (Doble Tap)
+    if (message.isUser) {
+      bubbleContent = GestureDetector(
+        onLongPress: () => _showEditDialog(context),
+        onDoubleTap: onDelete,
+        child: bubbleContent,
+      );
+    }
+
     return Align(
-      alignment: message.isUser ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
-        padding: const EdgeInsets.all(16.0),
-        decoration: BoxDecoration(
-          color: message.isUser ? Colors.blue[800] : Colors.grey[850],
-          borderRadius: BorderRadius.only(
-            topLeft: const Radius.circular(16),
-            topRight: const Radius.circular(16),
-            bottomLeft: Radius.circular(message.isUser ? 16 : 0),
-            bottomRight: Radius.circular(message.isUser ? 0 : 16),
-          ),
-        ),
+      alignment: isSystemStatus
+          ? Alignment.center // Los estados del sistema los centramos
+          : message.isUser
+          ? Alignment.centerRight
+          : Alignment.centerLeft,
+      child: ConstrainedBox(
         constraints: BoxConstraints(
-          maxWidth: MediaQuery.of(context).size.width * 0.8,
+          maxWidth: MediaQuery.of(context).size.width * (isSystemStatus ? 0.9 : 0.85),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (message.isUser)
-              Text(
-                message.text,
-                style: const TextStyle(color: Colors.white, fontSize: 16),
-              )
-            else
-              ..._buildAiContent(styleSheet),
-            
-            if (!message.isUser) ...[
-              const SizedBox(height: 10),
-              Align(
-                alignment: Alignment.centerRight,
-                child: IconButton(
-                  icon: const Icon(Icons.copy, color: Colors.white70, size: 20),
-                  tooltip: 'Copiar comando',
-                  onPressed: () => _copyToClipboard(context),
-                ),
-              ),
-            ]
-          ],
-        ),
+        child: bubbleContent,
       ),
     );
   }
 
-  List<Widget> _buildAiContent(MarkdownStyleSheet styleSheet) {
-    final matches = _codeBlockRegex.allMatches(message.text).toList();
-    if (matches.isEmpty) {
-      return [MarkdownBody(data: message.text, styleSheet: styleSheet)];
-    }
+  List<Widget> _buildContent(BuildContext context, MarkdownStyleSheet styleSheet) {
+    List<Widget> widgets = [];
+    int lastIndex = 0;
 
-    final widgets = <Widget>[];
-    var lastIndex = 0;
+    final matches = _codeBlockRegex.allMatches(message.text);
 
     for (final match in matches) {
       final before = message.text.substring(lastIndex, match.start);
@@ -101,7 +156,8 @@ class ChatBubble extends StatelessWidget {
       widgets.add(MarkdownBody(data: fencedBlock, styleSheet: styleSheet));
 
       final codeContent = match.group(1)?.trim() ?? '';
-      if (codeContent.isNotEmpty && onExecuteCommand != null) {
+      // No mostramos botón de ejecutar si es un estado del sistema
+      if (codeContent.isNotEmpty && onExecuteCommand != null && !isSystemStatus) {
         widgets.add(const SizedBox(height: 6));
         widgets.add(_buildExecuteButton(codeContent));
       }
@@ -132,7 +188,7 @@ class ChatBubble extends StatelessWidget {
             side: const BorderSide(color: AppColors.primary),
           ),
         ),
-        onPressed: () => onExecuteCommand?.call(command),
+        onPressed: () => onExecuteCommand!(command),
       ),
     );
   }

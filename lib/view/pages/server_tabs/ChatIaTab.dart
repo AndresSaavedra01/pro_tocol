@@ -1,52 +1,19 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:pro_tocol/injection.dart';
-import 'package:pro_tocol/model/entities/Server.dart';
+
 import 'package:pro_tocol/model/entities/chat_message.dart';
-import 'package:pro_tocol/model/entities/chat_message_entity.dart';
-import 'package:pro_tocol/model/repositories/ChatHistoryRepository.dart';
-import 'package:pro_tocol/model/services/ia_service.dart';
 import 'package:pro_tocol/view/components/chat_bubble.dart';
 import 'package:pro_tocol/view/theme/AppColors.dart';
-import 'package:xterm/xterm.dart';
 
-class ChatIaController extends ChangeNotifier {
-  final List<_ChatIaPrompt> _queue = [];
-
-  void submitPrompt(String prompt, {String? userDisplay}) {
-    _queue.add(_ChatIaPrompt(prompt, userDisplay));
-    notifyListeners();
-  }
-
-  _ChatIaPrompt? nextPending() {
-    if (_queue.isEmpty) return null;
-    return _queue.removeAt(0);
-  }
-
-  bool get hasPending => _queue.isNotEmpty;
-}
-
-class _ChatIaPrompt {
-  final String prompt;
-  final String? userDisplay;
-
-  const _ChatIaPrompt(this.prompt, this.userDisplay);
-}
+import '../../../controller/ChatIaController.dart';
+import '../../components/TypingIndicatorBubble.dart';
 
 class ChatIaTab extends StatefulWidget {
-  final String serverIp;
-  final ChatIaController? controller;
-  final String profileId;
-  final Server? activeServer; // Para ejecutar scripts vía SSH/SFTP
+  final ChatIaController controller;
 
   const ChatIaTab({
     super.key,
-    required this.serverIp,
-    required this.profileId,
-    this.activeServer,
-    this.controller,
+    required this.controller,
   });
 
   @override
@@ -56,460 +23,25 @@ class ChatIaTab extends StatefulWidget {
 class _ChatIaTabState extends State<ChatIaTab> {
   final TextEditingController _textController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
-  bool _isSending = false;
-  bool _awaitingFirstChunk = false;
-  bool _isScriptMode = false; // Modo generación de scripts
-
-  IAService get _iaService => getIt<IAService>();
-  ChatHistoryRepository get _historyRepo => getIt<ChatHistoryRepository>();
-
-  List<ChatMessage> _mensajes = [];
 
   @override
   void initState() {
     super.initState();
-    _cargarHistorial();
-    widget.controller?.addListener(_handleExternalPrompt);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _handleExternalPrompt());
+    widget.controller.addListener(_onStateChanged);
+    widget.controller.cargarHistorial();
   }
 
-  Future<void> _cargarHistorial() async {
-    final mensajesDb = await _historyRepo.getMessagesByServerAndProfile(
-        widget.serverIp, widget.profileId);
-    setState(() {
-      if (mensajesDb.isEmpty) {
-        _mensajes = [
-          ChatMessage(
-            text:
-                "¡Hola! Soy tu asistente de Pro-Tocol. ¿En qué te puedo ayudar con el servidor ${widget.serverIp}?",
-            isUser: false,
-          )
-        ];
-      } else {
-        _mensajes = mensajesDb
-          .map((e) => ChatMessage(
-            text: e.editedContent ?? e.content, isUser: e.role == 'user'))
-          .toList();
-      }
-    });
+  @override
+  void dispose() {
+    widget.controller.removeListener(_onStateChanged);
+    _textController.dispose();
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _onStateChanged() {
+    if (mounted) setState(() {});
     _scrollToBottom();
-  }
-
-  Future<void> _enviarMensaje() async {
-    if (_isSending) return;
-    final textoUsuario = _textController.text.trim();
-    if (textoUsuario.isEmpty) return;
-
-    await _historyRepo.saveMessage(ChatMessageEntity(
-      serverIp: widget.serverIp,
-      profileId: widget.profileId,
-      role: 'user',
-      content: textoUsuario,
-      timestamp: DateTime.now(),
-    ));
-
-    _textController.clear();
-    await _sendPromptInternal(prompt: textoUsuario, userDisplay: textoUsuario);
-  }
-
-  void _handleExternalPrompt() {
-    if (!mounted) return;
-    _drainExternalQueue();
-  }
-
-  void _drainExternalQueue() {
-    if (_isSending) return;
-    final controller = widget.controller;
-    if (controller == null) return;
-    final next = controller.nextPending();
-    if (next == null) return;
-    _sendPromptInternal(
-      prompt: next.prompt,
-      userDisplay: next.userDisplay ?? 'Analiza este error del terminal.',
-    );
-  }
-
-  Future<void> _sendPromptInternal({
-    required String prompt,
-    required String userDisplay,
-  }) async {
-    if (_isSending) return;
-
-    setState(() {
-      _mensajes.add(ChatMessage(text: userDisplay, isUser: true));
-      _isSending = true;
-    });
-    _scrollToBottom();
-
-    if (_isScriptMode) {
-      await _handleScriptGeneration(prompt);
-    } else {
-      await _handleNormalChat(prompt);
-    }
-  }
-
-  // ================= MODO SCRIPT (nuevo) =================
-
-  Future<void> _handleScriptGeneration(String prompt) async {
-    setState(() {
-      _awaitingFirstChunk = true;
-      _mensajes.add(ChatMessage(text: '', isUser: false)); // placeholder
-    });
-    final aiIndex = _mensajes.length - 1;
-
-    try {
-      final scriptCode = await _iaService.generarScript(prompt);
-
-      final assistantText = "He generado tu script:\n\n```bash\n$scriptCode\n```";
-
-      // ¡NUEVO! Guardamos en el historial el script generado por la IA
-      await _historyRepo.saveMessage(ChatMessageEntity(
-        serverIp: widget.serverIp,
-        profileId: widget.profileId,
-        role: 'assistant',
-        content: assistantText,
-        timestamp: DateTime.now(),
-      ));
-
-      setState(() {
-        _awaitingFirstChunk = false;
-        _mensajes[aiIndex] = ChatMessage(text: assistantText, isUser: false);
-      });
-
-      if (mounted) _showScriptConfirmationDialog(scriptCode);
-    } catch (e) {
-      if (!mounted) return;
-      final errorText = "Error al generar script: $e";
-
-      await _historyRepo.saveMessage(ChatMessageEntity(
-        serverIp: widget.serverIp,
-        profileId: widget.profileId,
-        role: 'assistant',
-        content: errorText,
-        timestamp: DateTime.now(),
-      ));
-
-      setState(() {
-        _awaitingFirstChunk = false;
-        _mensajes[aiIndex] = ChatMessage(text: errorText, isUser: false);
-      });
-    } finally {
-      if (mounted) setState(() => _isSending = false);
-      _scrollToBottom();
-    }
-  }
-
-  void _showScriptConfirmationDialog(String scriptCode) {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        backgroundColor: AppColors.surface,
-        title: const Text("Script Generado", style: TextStyle(color: AppColors.textPrimary)),
-        content: SingleChildScrollView(
-          child: Container(
-            padding: const EdgeInsets.all(12.0),
-            color: Colors.black54,
-            child: Text(
-              scriptCode,
-              style: const TextStyle(color: Colors.greenAccent, fontFamily: 'monospace', fontSize: 12),
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text("Cancelar", style: TextStyle(color: Colors.redAccent))
-          ),
-          ElevatedButton.icon(
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
-            icon: const Icon(Icons.play_arrow, color: Colors.white),
-            label: const Text("Ejecutar en Servidor", style: TextStyle(color: Colors.white)),
-            onPressed: () {
-              Navigator.pop(context);
-              _showPasswordDialogAndExecute(scriptCode); // ¡Llamamos al diálogo de contraseña!
-            },
-          )
-        ],
-      ),
-    );
-  }
-
-  // --- NUEVO: Petición de contraseña ---
-  void _showPasswordDialogAndExecute(String scriptCode) {
-    final TextEditingController pwdController = TextEditingController();
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        backgroundColor: AppColors.surface,
-        title: const Text("Autenticación Sudo", style: TextStyle(color: AppColors.textPrimary)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text("Se requieren permisos para ejecutar este script. Ingresa tu contraseña:",
-                style: TextStyle(color: AppColors.textMuted)),
-            const SizedBox(height: 12),
-            TextField(
-              controller: pwdController,
-              obscureText: true,
-              style: const TextStyle(color: AppColors.textPrimary),
-              decoration: InputDecoration(
-                hintText: "Contraseña",
-                hintStyle: const TextStyle(color: AppColors.textMuted),
-                filled: true,
-                fillColor: AppColors.surfaceHighlight,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("Cancelar", style: TextStyle(color: Colors.redAccent)),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
-            onPressed: () {
-              final password = pwdController.text;
-              Navigator.pop(context);
-              _executeScriptOnServer(scriptCode, password); // Mandamos script + password
-            },
-            child: const Text("Ejecutar", style: TextStyle(color: Colors.white)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _executeScriptOnServer(String scriptCode, String password) async {
-    if (widget.activeServer?.sshService == null || widget.activeServer!.sshService.sftp == null) {
-      await _addSystemMessage("Error: No hay conexión SSH/SFTP activa con el servidor.");
-      return;
-    }
-
-    setState(() => _isSending = true);
-    await _addSystemMessage("Iniciando despliegue y ejecución del script en /tmp/scripts...");
-
-    try {
-      final sftp = widget.activeServer!.sshService.sftp!;
-      final ssh = widget.activeServer!.sshService;
-
-      // ¡CORRECCIÓN AQUÍ! Creamos la carpeta usando SSH, es inmune a bloqueos.
-      await ssh.runSingleCommand("mkdir -p /tmp/scripts");
-
-      // Guardamos el archivo localmente
-      final tempDir = await getTemporaryDirectory();
-      final fileName = "auto_${DateTime.now().millisecondsSinceEpoch}.sh";
-      final tempFile = File('${tempDir.path}/$fileName');
-      await tempFile.writeAsString(scriptCode);
-
-      // Subimos por SFTP
-      final remotePath = "/tmp/scripts/$fileName";
-      await sftp.uploadFile(tempFile.path, remotePath);
-
-      // Damos permisos de ejecución y quitamos retornos de carro de Windows (\r)
-      await ssh.runSingleCommand("sed -i 's/\\r\$//' $remotePath && chmod +x $remotePath");
-
-      // Ejecutamos con la nueva función a prueba de fallos
-      final resultado = await ssh.runSudoCommand(remotePath, password);
-
-      await _addSystemMessage("Ejecución Finalizada.\n\nSalida del terminal:\n```text\n$resultado\n```");
-
-      // Limpiamos el archivo local
-      if (await tempFile.exists()) {
-        await tempFile.delete();
-      }
-    } catch (e) {
-      await _addSystemMessage("Error durante la ejecución del script:\n$e");
-    } finally {
-      if (mounted) setState(() => _isSending = false);
-    }
-  }
-
-  // --- Refactorizado para que guarde en el historial siempre ---
-  Future<void> _addSystemMessage(String text) async {
-    await _historyRepo.saveMessage(ChatMessageEntity(
-      serverIp: widget.serverIp,
-      profileId: widget.profileId,
-      role: 'assistant',
-      content: text,
-      timestamp: DateTime.now(),
-    ));
-
-    if (mounted) {
-      setState(() {
-        _mensajes.add(ChatMessage(text: text, isUser: false));
-      });
-      _scrollToBottom();
-    }
-  }
-
-  Future<ChatMessageEntity?> _findUserMessageEntityByText(String text) async {
-    final mensajesDb = await _historyRepo.getMessagesByServerAndProfile(
-        widget.serverIp, widget.profileId);
-    for (final entity in mensajesDb) {
-      final display = entity.editedContent ?? entity.content;
-      if (entity.role == 'user' && display == text) {
-        return entity;
-      }
-    }
-    return null;
-  }
-
-  Future<void> _deleteAllChat() async {
-    await _historyRepo.deleteAllByServerAndProfile(
-        widget.serverIp, widget.profileId);
-    await _cargarHistorial();
-  }
-
-  Future<void> _editUserMessage(int index, ChatMessage message) async {
-    final controller = TextEditingController(text: message.text);
-    final newText = await showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: AppColors.surface,
-        title: const Text('Editar mensaje',
-            style: TextStyle(color: AppColors.textPrimary)),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          maxLines: null,
-          style: const TextStyle(color: AppColors.textPrimary),
-          decoration: const InputDecoration(
-            hintText: 'Editar mensaje...',
-            hintStyle: TextStyle(color: AppColors.textMuted),
-            border: OutlineInputBorder(),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancelar'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, controller.text.trim()),
-            child: const Text('Guardar'),
-          ),
-        ],
-      ),
-    );
-    controller.dispose();
-    if (newText == null || newText.isEmpty) return;
-
-    final entity = await _findUserMessageEntityByText(message.text);
-    if (entity != null) {
-      await _historyRepo.updateMessageContent(entity.id, newText);
-    }
-    if (!mounted) return;
-    setState(() {
-      _mensajes[index] = ChatMessage(text: newText, isUser: true);
-    });
-  }
-
-  // ================= CHAT NORMAL (original) =================
-
-  Future<void> _handleNormalChat(String prompt) async {
-    setState(() {
-      _mensajes.add(ChatMessage(text: '', isUser: false));
-      _awaitingFirstChunk = true;
-    });
-
-    final aiIndex = _mensajes.length - 1;
-    final buffer = StringBuffer();
-
-    try {
-      await for (final chunk in _iaService.generateStream(prompt, _mensajes)) {
-        if (!mounted) return;
-        if (chunk.isEmpty) continue;
-        buffer.write(chunk);
-        setState(() {
-          if (_awaitingFirstChunk) _awaitingFirstChunk = false;
-          _mensajes[aiIndex] = ChatMessage(text: buffer.toString(), isUser: false);
-        });
-        _scrollToBottom();
-      }
-
-      await _historyRepo.saveMessage(ChatMessageEntity(
-        serverIp: widget.serverIp,
-        profileId: widget.profileId,
-        role: 'assistant',
-        content: buffer.toString(),
-        timestamp: DateTime.now(),
-      ));
-    } catch (e) {
-      if (!mounted) return;
-      final friendly = _friendlyErrorMessage(e);
-      setState(() {
-        _awaitingFirstChunk = false;
-        _mensajes[aiIndex] = ChatMessage(text: friendly, isUser: false);
-      });
-      _showConfigPromptIfNeeded(e, friendly);
-      _scrollToBottom();
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isSending = false;
-          _awaitingFirstChunk = false;
-        });
-      }
-      if (mounted) {
-        _drainExternalQueue();
-      }
-    }
-  }
-
-  // ================= MÉTODOS AUXILIARES (originales) =================
-
-  Future<void> _executeInTerminal(String command) async {
-    final trimmed = command.trim();
-    if (trimmed.isEmpty) return;
-
-    final isMultiLine = trimmed.contains('\n') || trimmed.contains('\r');
-    if (isMultiLine) {
-      final shouldRun = await _confirmMultiLineCommand(trimmed);
-      if (!shouldRun) return;
-    }
-
-    final terminal = getIt<Terminal>();
-    terminal.textInput(trimmed);
-    terminal.keyInput(TerminalKey.enter);
-    _scrollToBottom();
-  }
-
-  Future<bool> _confirmMultiLineCommand(String command) async {
-    if (!mounted) return false;
-
-    final result = await showDialog<bool>(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          backgroundColor: AppColors.surface,
-          title: const Text(
-            'Ejecutar comando de varias lineas',
-            style: TextStyle(color: AppColors.textPrimary),
-          ),
-          content: Text(
-            'Este comando tiene varias lineas. Quieres ejecutarlo en la terminal activa?',
-            style: const TextStyle(color: AppColors.textSecondary),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Cancelar'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              style: TextButton.styleFrom(foregroundColor: AppColors.primary),
-              child: const Text('Ejecutar'),
-            ),
-          ],
-        );
-      },
-    );
-
-    return result ?? false;
   }
 
   void _scrollToBottom() {
@@ -517,239 +49,191 @@ class _ChatIaTabState extends State<ChatIaTab> {
       if (_scrollController.hasClients) {
         _scrollController.animateTo(
           _scrollController.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 250),
+          duration: const Duration(milliseconds: 300),
           curve: Curves.easeOut,
         );
       }
     });
   }
 
-  String _friendlyErrorMessage(Object error) {
-    final message = error.toString();
-    if (_isConfigError(message)) {
-      return 'La IA no esta configurada o faltan credenciales. Ve a Ajustes de IA.';
-    }
-    return 'No se pudo obtener respuesta: $message';
-  }
+  void _enviarMensaje() {
+    final texto = _textController.text.trim();
+    if (texto.isEmpty) return;
 
-  bool _isConfigError(String message) {
-    final lower = message.toLowerCase();
-    return lower.contains('configuracion') ||
-        lower.contains('token') ||
-        lower.contains('modelo');
-  }
-
-  void _showConfigPromptIfNeeded(Object error, String fallbackMessage) {
-    final message = error.toString();
-    if (_isConfigError(message)) {
+    _textController.clear();
+    widget.controller.enviarMensajeUsuario(texto, onError: (error) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Text('Configura la IA para continuar.'),
-          action: SnackBarAction(
-            label: 'Configurar',
-            onPressed: () => context.push('/ai-settings'),
+          content: Text(
+            'Error en el Agente de IA: $error',
+            style: const TextStyle(color: Colors.white),
           ),
+          backgroundColor: Colors.redAccent,
         ),
       );
-      return;
-    }
-
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(fallbackMessage)));
+    });
   }
-
-  // ================= BUILD =================
 
   @override
   Widget build(BuildContext context) {
-    return Theme(
-        data: ThemeData.dark().copyWith(
-          scaffoldBackgroundColor: AppColors.background,
-          cardColor: AppColors.surface,
-        ),
+    final ctrl = widget.controller;
+
+    return Container(
+      color: AppColors.surface,
       child: Column(
-      children: [
-        Expanded(
-          child: ListView.builder(
-            controller: _scrollController,
-            padding: const EdgeInsets.all(12.0),
-            itemCount: _mensajes.length,
-            itemBuilder: (context, index) {
-              final message = _mensajes[index];
-              if (!message.isUser && message.text.isEmpty && _awaitingFirstChunk) {
-                return const _TypingIndicatorBubble();
-              }
-              if (message.isUser) {
-                return Dismissible(
-                  key: ValueKey(
-                      _mensajes[index].hashCode.toString() + index.toString()),
-                  direction: DismissDirection.endToStart,
-                  background: Container(
-                    alignment: Alignment.centerRight,
-                    padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                    color: Colors.redAccent,
-                    child: const Icon(Icons.delete_outline, color: Colors.white),
-                  ),
-                  onDismissed: (_) async {
-                    final entity =
-                        await _findUserMessageEntityByText(message.text);
-                    if (entity != null) {
-                      await _historyRepo.deleteMessage(entity.id);
-                    }
-                    if (!mounted) return;
-                    setState(() {
-                      _mensajes.removeAt(index);
-                    });
-                  },
-                  child: GestureDetector(
-                    onLongPress: () => _editUserMessage(index, message),
-                    child: ChatBubble(
-                      message: message,
-                      onExecuteCommand: null,
-                    ),
-                  ),
+        children: [
+          // 1. ÁREA DEL HISTORIAL DE MENSAJES
+          Expanded(
+            child: ctrl.mensajes.isEmpty && !ctrl.isSending
+                ? _buildEmptyState()
+                : ListView.builder(
+              controller: _scrollController,
+              padding: const EdgeInsets.all(16.0),
+              itemCount: ctrl.mensajes.length + (ctrl.awaitingFirstChunk ? 1 : 0),
+              itemBuilder: (context, index) {
+                // Si está esperando el primer fragmento del stream inicial, mostramos el indicador de escritura
+                if (index == ctrl.mensajes.length) {
+                  return const TypingIndicatorBubble();
+                }
+
+                final msg = ctrl.mensajes[index];
+
+                // Identificamos visualmente si la burbuja actual es un estado del agente en ejecución
+                final isAgentExecuting = msg.text.startsWith("🔍 Ejecutando:") ||
+                    msg.text.startsWith("🧠 Analizando");
+
+                return ChatBubble(
+                  message: msg,
+                  // Customizamos el diseño si es un estado interno del agente
+                  isSystemStatus: isAgentExecuting,
+                  onEditSubmitted: (newText) => ctrl.updateMessageContent(msg.text, newText, index),
+                  onDelete: () => ctrl.deleteMessage(msg.text),
                 );
-              }
-              return ChatBubble(
-                message: message,
-                onExecuteCommand: _executeInTerminal,
-              );
-            },
-          ),
-        ),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 10.0),
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            boxShadow: [
-              BoxShadow(
-                offset: const Offset(0, -2),
-                blurRadius: 10,
-                color: Colors.black.withOpacity(0.2),
-              )
-            ],
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-          ),
-          child: SafeArea(
-            child: Row(
-              children: [
-                // Toggle para modo script
-                Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Text("Script",
-                        style: TextStyle(fontSize: 10, color: AppColors.textMuted)),
-                    Switch(
-                      value: _isScriptMode,
-                      onChanged: _isSending ? null : (val) => setState(() => _isScriptMode = val),
-                      activeColor: AppColors.primary,
-                    ),
-                  ],
-                ),
-                IconButton(
-                  onPressed: _isSending ? null : _deleteAllChat,
-                  icon: const Icon(Icons.delete_outline),
-                  color: AppColors.textMuted,
-                  tooltip: 'Borrar historial',
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: TextField(
-                    controller: _textController,
-                    enabled: !_isSending,
-                    decoration: InputDecoration(
-                      hintText: _isScriptMode
-                          ? "Dile qué automatizar..."
-                          : "Pregúntale a la IA...",
-                      hintStyle: const TextStyle(color: AppColors.textMuted),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(30.0),
-                        borderSide: BorderSide.none,
-                      ),
-                      filled: true,
-                      fillColor: AppColors.background,
-                      contentPadding:
-                          const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-                    ),
-                    style: const TextStyle(color: AppColors.textPrimary),
-                    onSubmitted: (_) => _enviarMensaje(),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Material(
-                  color: AppColors.primary,
-                  shape: const CircleBorder(),
-                  elevation: 4,
-                  clipBehavior: Clip.antiAlias,
-                  child: InkWell(
-                    onTap: _isSending ? null : _enviarMensaje,
-                    splashColor: Colors.white.withOpacity(0.1),
-                    highlightColor: Colors.white.withOpacity(0.05),
-                    child: Ink(
-                      child: Padding(
-                        padding: const EdgeInsets.all(12.0),
-                        child: _isSending
-                            ? const SizedBox(
-                                width: 24,
-                                height: 24,
-                                child: CircularProgressIndicator(
-                                    color: Colors.white, strokeWidth: 2))
-                            : const Icon(Icons.send_rounded,
-                                color: Colors.white, size: 24),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
+              },
             ),
           ),
-        ),
-      ],
-      )
+
+          // 2. CONTROLES DE MODO (CHAT NORMAL VS GENERADOR DE SCRIPTS)
+          _buildModeSelector(ctrl),
+
+          // 3. BARRA DE ENTRADA DE TEXTO Y ACCIONES
+          _buildInputBar(ctrl),
+        ],
+      ),
     );
   }
 
-  @override
-  void dispose() {
-    widget.controller?.removeListener(_handleExternalPrompt);
-    _textController.dispose();
-    _scrollController.dispose();
-    super.dispose();
-  }
-}
-
-class _TypingIndicatorBubble extends StatelessWidget {
-  const _TypingIndicatorBubble();
-
-  @override
-  Widget build(BuildContext context) {
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
-        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
-        decoration: BoxDecoration(
-          color: AppColors.surfaceHighlight,
-          borderRadius: const BorderRadius.only(
-            topLeft: Radius.circular(16),
-            topRight: Radius.circular(16),
-            bottomRight: Radius.circular(16),
+  // Vista que aparece si no hay conversación previa
+  Widget _buildEmptyState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.auto_awesome, size: 64, color: AppColors.primary.withOpacity(0.5)),
+          const SizedBox(height: 16),
+          const Text(
+            '¿En qué puedo ayudarte hoy?',
+            style: TextStyle(color: AppColors.textSecondary, fontSize: 16, fontWeight: FontWeight.bold),
           ),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: const [
-            Text('Escribiendo...',
-                style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
-            SizedBox(height: 6),
-            SizedBox(
-              width: 120,
-              child: LinearProgressIndicator(
-                minHeight: 2,
-                backgroundColor: AppColors.surface,
-                valueColor: AlwaysStoppedAnimation(AppColors.primary),
+          const SizedBox(height: 8),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 40),
+            child: Text(
+              'Tatiana puede analizar la salud de tu servidor, generar scripts automatizados o inspeccionar configuraciones en tiempo real usando comandos SSH.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: AppColors.textMuted, fontSize: 13),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Selector entre Modo Conversación y Modo Script Automático
+  Widget _buildModeSelector(ChatIaController ctrl) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      color: AppColors.surfaceHighlight.withOpacity(0.5),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Row(
+            children: [
+              Icon(
+                ctrl.isScriptMode ? Icons.code_rounded : Icons.forum_rounded,
+                size: 16,
+                color: ctrl.isScriptMode ? AppColors.background : AppColors.primary,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                ctrl.isScriptMode ? "Modo: Generador de Scripts Bash" : "Modo: Asistente del Servidor (Tatiana)",
+                style: const TextStyle(color: AppColors.textSecondary, fontSize: 12, fontWeight: FontWeight.w500),
+              ),
+            ],
+          ),
+          Switch(
+            value: ctrl.isScriptMode,
+            activeColor: AppColors.background,
+            activeTrackColor: AppColors.background.withOpacity(0.3),
+            inactiveThumbColor: AppColors.textMuted,
+            // Desactivar el interruptor si la IA está operando
+            onChanged: ctrl.isSending ? null : (val) => ctrl.toggleScriptMode(val),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Barra de herramientas inferior con el TextField
+  Widget _buildInputBar(ChatIaController ctrl) {
+    return Container(
+      padding: const EdgeInsets.only(left: 8.0, right: 8.0, bottom: 16.0, top: 8.0),
+      color: AppColors.surfaceHighlight,
+      child: SafeArea(
+        top: false,
+        child: Row(
+          children: [
+            // Botón para borrar el historial de chat (deshabilitado si está enviando)
+            IconButton(
+              onPressed: ctrl.isSending ? null : ctrl.deleteAllChat,
+              icon: const Icon(Icons.delete_outline),
+              color: AppColors.textMuted,
+              tooltip: 'Borrar historial',
+            ),
+            const SizedBox(width: 8),
+
+            // Entrada de texto
+            Expanded(
+              child: TextField(
+                controller: _textController,
+                enabled: !ctrl.isSending, // Bloquea la entrada si el agente está en medio de una tarea
+                decoration: InputDecoration(
+                  hintText: ctrl.isScriptMode ? "Dile qué automatizar..." : "Pregúntale a la IA...",
+                  hintStyle: const TextStyle(color: AppColors.textMuted),
+                  filled: true,
+                  fillColor: AppColors.background,
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(30.0), borderSide: BorderSide.none),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                ),
+                style: const TextStyle(color: AppColors.textPrimary),
+                onSubmitted: ctrl.isSending ? null : (_) => _enviarMensaje(),
               ),
             ),
+            const SizedBox(width: 10),
+
+            // Botón de Enviar / Cargando Dinámico
+            FloatingActionButton(
+              mini: true,
+              backgroundColor: ctrl.isSending ? AppColors.textMuted : AppColors.primary,
+              onPressed: ctrl.isSending ? null : _enviarMensaje,
+              child: ctrl.isSending
+                  ? const SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+              )
+                  : const Icon(Icons.send_rounded, color: Colors.white, size: 18),
+            )
           ],
         ),
       ),
