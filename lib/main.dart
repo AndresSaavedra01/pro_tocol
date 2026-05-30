@@ -1,68 +1,57 @@
 import 'package:flutter/material.dart';
 import 'package:isar/isar.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
-// Importaciones de tus entidades y controladores
-import 'package:pro_tocol/entity/DataBaseEntities.dart';
-import 'package:pro_tocol/presentation/controllers/ProfileController.dart';
-import 'package:pro_tocol/presentation/controllers/NavigationController.dart';
-import 'package:pro_tocol/pages/profile_screen.dart';
-import 'package:pro_tocol/presentation/controllers/SSHOrchestrator.dart';
+// --- Entidades ---
+import 'package:pro_tocol/model/entities/DataBaseEntities.dart';
+import 'package:pro_tocol/model/entities/chat_message_entity.dart';
+
+// --- Enrutador ---
+import 'package:pro_tocol/view/router/AppRouter.dart';
+
+// --- Inyección de Dependencias ---
+import 'injection.dart';
 
 void main() async {
-  // 1. Aseguramos que los bindings de Flutter estén listos para procesos asíncronos
+  // 1. Inicialización básica
   WidgetsFlutterBinding.ensureInitialized();
 
-  // 2. Configuramos la ruta de almacenamiento para Isar
-  final dir = await getApplicationDocumentsDirectory();
+  // Inicializar Supabase Auth
+  await Supabase.initialize(
+    url: 'https://syfjxpeaqpdelyyueise.supabase.co',
+    anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN5Zmp4cGVhcXBkZWx5eXVlaXNlIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3OTM1ODg3OCwiZXhwIjoyMDk0OTM0ODc4fQ.02KUOemRQJ5NVKv6_8I6acyffMmbzDZq6fH0m8z425A',
+  );
 
-  // 3. Abrimos la base de datos con los esquemas de Perfil y Configuración de Servidor
+  final dir = await getApplicationDocumentsDirectory();
   final isar = await Isar.open(
-    [ProfileSchema, ServerConfigSchema],
+    [ServerConfigSchema, AiConfigSchema, ChatMessageEntitySchema, PairKeysSchema],
     directory: dir.path,
   );
 
-  // 4. Instanciamos los controladores (nuestro "cerebro" global)
-  final profileController = ProfileController(isar: isar);
-  final navigationController = NavigationController();
-  final sshOrchestrator = SSHOrchestrator();
+  // 2. Inicializar el contenedor de dependencias (GetIt)
+  await setupDependencies(isar);
 
-  // 5. Corremos la App pasando los controladores por constructor
-  runApp(MyApp(
-    profileController: profileController,
-    navigationController: navigationController,
-    sshOrchestrator: sshOrchestrator,
-  ));
+  // 3. Enrutador
+  final appRouter = AppRouter();
+
+  runApp(MyApp(appRouter: appRouter));
 }
 
 class MyApp extends StatelessWidget {
-  final ProfileController profileController;
-  final NavigationController navigationController;
-  final SSHOrchestrator sshOrchestrator;
+  final AppRouter appRouter;
 
-  // El constructor ya no es 'const' porque recibe objetos que se crean en tiempo de ejecución
   const MyApp({
     super.key,
-    required this.profileController,
-    required this.navigationController,
-    required this.sshOrchestrator
+    required this.appRouter,
   });
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Gestor de Perfiles',
+    return MaterialApp.router(
+      title: 'Pro-Tocol SSH',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF8B63FF)),
-        useMaterial3: true,
-      ),
-      // 6. Inyectamos los controladores en la pantalla de entrada
-      home: ProfileScreen(
-        controller: profileController,
-        navigationController: navigationController,
-        sshOrchestrator: sshOrchestrator,
-      ),
+      routerConfig: appRouter.router,
     );
   }
 }

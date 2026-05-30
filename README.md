@@ -27,7 +27,7 @@ El sistema permite la conexión a servidores mediante el protocolo SSH, organiza
 
 ---
 
-## Planificación: Sprint 1
+## Planificación: Sprint 0
 
 El objetivo de este primer bloque es establecer la base de conectividad, la persistencia de perfiles y la navegación visual básica.
 
@@ -43,7 +43,7 @@ El objetivo de este primer bloque es establecer la base de conectividad, la pers
 
 ---
 
-## Backlog del Sprint 1: Conectividad y Estructura Base
+## Backlog del Sprint 0: Conectividad y Estructura Base
 
 | ID | Rol | Historia de Usuario | Descripción / Criterios de Aceptación | SP |
 | :--- | :--- | :--- | :--- | :--- |
@@ -69,54 +69,62 @@ El objetivo de este primer bloque es establecer la base de conectividad, la pers
 5. **Navegación:** El explorador debe listar archivos de cualquier ruta solicitada (ej. `/etc` o `/var`).
 ## Notas de Implementación
 
----
+* Las **Sesiones Temporales** no se persisten en la base de datos local; se eliminan al cerrar la aplicación o la sesión.
+* El **Explorador de Archivos** en el Sprint 1 se limita a la visualización de la estructura de directorios para asegurar estabilidad.
+* La arquitectura debe garantizar que las tres pestañas del servidor mantengan su estado independiente durante la conexión activa.
 
 ---
 
-## Planificación: Sprint 2
 
-El objetivo de este segundo bloque es integrar el asistente de inteligencia artificial de forma completa, conectándolo a la terminal SSH activa y dotando al sistema de capacidades de diagnóstico, ejecución supervisada y persistencia de conversaciones.
 
-### Estructura de la Épica IA
+## Planificación: Sprint 1
+El objetivo de este primer bloque es transformar el prototipo base de Pro-Tocol en una aplicación estable mediante la aplicación de estándares SOLID, garantizando un manejo de errores resiliente e implementando las capacidades núcleo de gestión visual (SFTP y Monitoreo de Hardware).
 
-1. **Configuración y Cliente:** Integración con la API de Ollama y persistencia de credenciales.
-2. **Interfaz de Chat:** Componente visual de conversación con soporte de streaming token a token.
-3. **Bridge IA-Terminal:** Ejecución de bloques de código generados por la IA directamente en la terminal activa.
-4. **Contexto y Seguridad:** Inyección de metadatos del servidor y sanitización de scripts antes de su ejecución.
-5. **Historial y UX:** Persistencia de consultas entre sesiones y experiencia de carga fluida.
 
----
+### Alcance
 
-## Backlog del Sprint 2: Asistente IA con Ollama
+| Épica | Enfoque |
+|---|---|
+| **Refactorización del Código** | • Modularización<br>• SOLID/DRY<br>• Validaciones<br>• Manejo de errores<br>• Gestión de perfiles<br>• Pulido de UX. |
+| **Expansión de Nuevas Funcionalidades** | • Dashboard de Monitoreo<br>• Explorador SFTP<br>• Historial de Comandos<br>• Detección de Distro<br>• Instalador Gráfico<br>• Sistema de Templates. |
 
-| ID | Historia de Usuario | Descripción / Criterios de Aceptación | SP |
-| :--- | :--- | :--- | :--- |
-| **ES-52** | **Refactorización de Arquitectura y Código Limpio** | Reestructuración del proyecto bajo principios SOLID, separación estricta de capas y eliminación de dependencias circulares. | 5 |
-| **ES-42** | **Cliente API (Ollama)** | Implementación del cliente HTTP para comunicarse con la API de Ollama. Soporte de streaming de respuesta y manejo de errores de red. | 5 |
-| **ES-43** | **Configuración de IA** | Pantalla de configuración para ingresar y persistir la URL base y credenciales de Ollama. Validación del endpoint antes de guardar. | 3 |
-| **ES-45** | **Interfaz de Chat** | Componente visual de conversación con burbujas diferenciadas (usuario / IA), auto-scroll y renderizado de bloques de código Markdown. | 3 |
-| **ES-47** | **Inyección de Contexto del Servidor** | Recolección automática de metadatos del servidor activo (distro, hardware, servicios) para incluirlos como contexto en cada prompt enviado a la IA. | 4 |
-| **ES-48** | **Seguridad y Sanitización** | Revisión y filtrado de los scripts generados por la IA antes de permitir su ejecución. Confirmación explícita del usuario para comandos destructivos. | 3 |
-| **ES-50** | **Historial de Consultas** | Persistencia del historial de chat en base de datos local (Hive/Isar). El contexto de la conversación se restaura al reiniciar la sesión. | 4 |
-| **ES-51** | **UX de Carga (Streaming)** | Visualización token a token de la respuesta de la IA mediante `StreamProvider`. Indicador de escritura animado mientras la respuesta llega. | 3 |
-| **ES-46** | **Bridge IA-Terminal** | Botón "Ejecutar en Terminal" en cada bloque de código del chat. Inyección del comando en la terminal xterm activa usando el singleton compartido. | 3 |
-| **ES-49** | **Explicador de Errores** | Captura automática de errores en la terminal SSH. Botón para enviar el error al asistente y recibir un diagnóstico con solución propuesta. | 5 |
-| **TOTAL** | | **Épica ES-44 completada al 100%** | **38** |
 
----
+### Fuera de Alcance (Sprint 1)
 
-## Criterios de Aceptación Generales — Sprint 2 (DoD)
+- Entrenamiento de la IA
+- Conexión de IA
+- Asistente de IA integrado (Ollama)
+- Despliegue
 
-1. **Conexión con Ollama:** La app debe conectarse a la API configurada y recibir respuestas en streaming sin errores de red.
-2. **Bridge funcional:** Un bloque de código generado por la IA debe poder ejecutarse en la terminal activa con un solo toque.
-3. **Contexto real:** Cada prompt enviado a la IA debe incluir los metadatos actuales del servidor conectado.
-4. **Seguridad:** Ningún comando marcado como destructivo puede ejecutarse sin confirmación explícita del usuario.
-5. **Persistencia:** El historial de conversación debe sobrevivir al cierre y reinicio de la aplicación.
-6. **Diagnóstico:** Al producirse un error en la terminal, el usuario puede enviarlo al asistente y recibir una propuesta de solución.
+### Backlog del Sprint 1
 
-## Notas de Implementación — Sprint 2
+| ID | Rol | Historia de Usuario | Descripción / Criterios de Aceptación | SP |
+|---|---|---|---|---|
+| ES-34 | Dev A | Modularización | Reorganizar el proyecto en módulos claros (core, features, shared). Sin dependencias circulares. Modelos independientes de la UI. | 5 |
+| ES-35 | Dev A | Optimización DRY y SOLID | Eliminar código duplicado. Centralizar lógica SSH en un único Service. Clases con una sola responsabilidad (SRP). | 5 |
+| ES-36 | Dev A | Gestión Avanzada de Perfiles | Editar/eliminar perfiles con datos precargados. Diálogo de confirmación. Actualización inmediata en DB local. | 3 |
+| ES-37 | Dev B | Validación de Formularios | Validar formato IP/Dominio. Bloquear envío si faltan campos. Mensajes de error en rojo bajo el campo. | 2 |
+| ES-38 | Dev B | Gestión de Errores de Red | Capturar excepciones dartssh2 (Timeout, Auth Failed). Vista de error con botón "Reintentar". Log técnico para depuración. | 3 |
+| ES-39 | Dev B | Pulido de Interfaz (UX) | Animaciones de transición (Fade/Slide). Eliminar iconos sin funcionalidad. Corregir bug visual del cursor en terminal. | 2 |
+| ES-16 | Dev B | Dashboard de Monitoreo | CPU, RAM y Disco en tiempo real. Listado de procesos con opción kill. Estado de servicios Systemd. | 5 |
+| ES-18 | Dev C | Detección de Distro | Ejecutar `cat /etc/os-release` al conectar. Identificar apt/pacman/dnf. Mostrar logo de distro en el header. | 3 |
+| ES-40 | Dev C | Historial de Comandos | Guardar últimos 50 comandos en sesión. Navegar con flechas. Opción de limpiar historial. | 3 |
+| ES-41 | Dev C | Instalador Gráfico | Botones de instalar para apps comunes. Ejecución en segundo plano. Notificación de éxito o fallo. | 5 |
+| ES-12 | Dev A | Explorador SFTP Funcional | Subida de archivos por selector o drag & drop. Mover archivos entre directorios. Visualización de progreso. | 8 |
+| ES-20 | Dev C | Sistema de Templates | Checklist de validación antes de aplicar plantilla. Automatización de configuración básica. Reporte de cambios aplicados. | 5 |
+| **TOTAL** | | | Carga balanceada: Dev A (18), Dev B (12), Dev C (16) | **49** |
 
-* El **singleton `Terminal`** es compartido entre `TerminalTab` y `ChatIaTab` vía inyección de dependencias (`get_it`), garantizando que ambas pestañas operen sobre la misma instancia xterm.
-* La **captura de errores** se realiza en la capa SSH (no en xterm), utilizando un sentinel `__PROTO_EXIT__:$?` para detectar exit codes en shell interactivo sin interferir con el output normal.
-* El **streaming** se implementa con `StreamProvider` de Riverpod, permitiendo reconstrucciones de UI token a token sin afectar el rendimiento de la terminal SSH paralela.
-* Las **sesiones temporales** también tienen acceso al asistente de IA bajo la misma arquitectura de contexto que los servidores guardados.
+### Criterios de Aceptación Generales (DoD)
+
+1. **Conexión Exitosa:** Se debe lograr el acceso a un servidor Linux real desde la app.
+2. **Persistencia:** Al reiniciar la app, los perfiles y servidores creados deben seguir ahí.
+3. **Multitarea:** Se debe poder abrir una terminal en una sesión temporal y otra en un servidor guardado simultáneamente.
+4. **Monitoreo:** La pestaña de monitoreo debe mostrar datos reales de CPU, RAM y Disco del servidor.
+5. **Navegación:** El explorador debe listar archivos de cualquier ruta solicitada (ej. `/etc` o `/var`).
+
+### Notas de Implementación
+
+- Las Sesiones Temporales no se persisten en la base de datos local; se eliminan al cerrar la aplicación o la sesión.
+- El Explorador de Archivos en el Sprint 1 se limita a la visualización de la estructura de directorios para asegurar estabilidad.
+- La arquitectura debe garantizar que las pestañas del servidor mantengan su estado independiente durante la conexión activa.
+
