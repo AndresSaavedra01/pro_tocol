@@ -8,7 +8,7 @@ class ChatBubble extends StatelessWidget {
   final ChatMessage message;
   final void Function(String command)? onExecuteCommand;
 
-  // Nuevos parámetros para soportar la IA Agéntica y edición
+  // Parámetros para soportar la IA Agéntica y edición
   final bool isSystemStatus;
   final Function(String)? onEditSubmitted;
   final VoidCallback? onDelete;
@@ -45,10 +45,20 @@ class ChatBubble extends StatelessWidget {
           controller: controller,
           autofocus: true,
           style: const TextStyle(color: AppColors.textPrimary),
-          decoration: const InputDecoration(border: OutlineInputBorder()),
+          decoration: InputDecoration(
+            filled: true,
+            fillColor: AppColors.background,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide.none,
+            ),
+          ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancelar', style: TextStyle(color: AppColors.textMuted))
+          ),
           TextButton(
               onPressed: () {
                 Navigator.pop(context);
@@ -56,7 +66,7 @@ class ChatBubble extends StatelessWidget {
                   onEditSubmitted!(controller.text.trim());
                 }
               },
-              child: const Text('Guardar')
+              child: const Text('Guardar', style: TextStyle(color: AppColors.secondary))
           ),
         ],
       ),
@@ -65,49 +75,80 @@ class ChatBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // ESTILOS VISUALES DEPENDIENDO DEL TIPO DE MENSAJE
-    final bgColor = isSystemStatus
-        ? Colors.transparent
-        : message.isUser
-        ? AppColors.primary.withOpacity(0.2)
-        : AppColors.surfaceHighlight;
+    final bool isUser = message.isUser;
 
+    // ESTILOS VISUALES UNIFICADOS
+    // Ahora tanto la IA como los comandos usan el mismo fondo oscuro
+    final bgColor = isUser ? AppColors.primary : AppColors.surfaceHighlight;
+
+    // Los comandos tendrán un borde cyan para diferenciarse sutilmente, la IA un borde normal
     final borderColor = isSystemStatus
-        ? AppColors.background.withOpacity(0.5)
-        : Colors.transparent;
+        ? AppColors.secondary.withOpacity(0.4)
+        : (isUser ? Colors.transparent : AppColors.border.withOpacity(0.1));
 
-    final textColor = isSystemStatus
-        ? AppColors.textMuted
-        : Colors.white;
+    // Todos usan texto blanco claro
+    final textColor = isUser ? Colors.white : AppColors.textPrimary;
 
-    final styleSheet = MarkdownStyleSheet(
-      p: TextStyle(
+    // 1. Teñimos TODO el textTheme del color correcto (blanco) para evitar fugas de texto negro
+    final customTheme = Theme.of(context).copyWith(
+      textTheme: Theme.of(context).textTheme.apply(
+        bodyColor: textColor,
+        displayColor: textColor, // Esto fuerza a que títulos y cabeceras de tabla sean claros
+      ).copyWith(
+        bodyMedium: TextStyle(color: textColor, fontSize: 15, height: 1.4),
+      ),
+    );
+
+    // 2. Cargamos el StyleSheet directamente desde el tema heredado
+    final styleSheet = MarkdownStyleSheet.fromTheme(customTheme).copyWith(
+      // Reforzamos las tablas
+      tableHead: TextStyle(
         color: textColor,
-        fontSize: isSystemStatus ? 13 : 15,
-        fontStyle: isSystemStatus ? FontStyle.italic : FontStyle.normal,
+        fontWeight: FontWeight.bold,
       ),
-      code: TextStyle(
-        backgroundColor: Colors.black,
-        color: Colors.greenAccent[400],
+      tableBody: TextStyle(
+        color: textColor,
+      ),
+      tableBorder: TableBorder.all(
+        color: AppColors.border.withOpacity(0.3),
+        width: 1,
+      ),
+
+      // Forzar que las citas (blockquote) no hereden fondos cyan del sistema
+      blockquoteDecoration: const BoxDecoration(
+        color: Colors.transparent,
+        border: Border(left: BorderSide(color: AppColors.secondary, width: 4)),
+      ),
+      blockquote: TextStyle(color: textColor.withOpacity(0.7), fontStyle: FontStyle.italic),
+
+      // Estilo armónico para comandos en línea sin fondo molesto
+      code: const TextStyle(
+        backgroundColor: Colors.transparent,
+        color: Color(0xFFE5C07B), // Amarillo/Dorado sutil tipo VSCode
         fontFamily: 'monospace',
+        fontWeight: FontWeight.w600,
       ),
+
+      // Bloques grandes de código (La terminal)
       codeblockDecoration: BoxDecoration(
-        color: Colors.black,
-        borderRadius: BorderRadius.circular(8),
+        color: AppColors.terminalBg,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.surfaceHighlight, width: 1.5),
       ),
     );
 
     Widget bubbleContent = Container(
-      margin: const EdgeInsets.symmetric(vertical: 6.0),
+      margin: const EdgeInsets.symmetric(vertical: 4.0),
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
       decoration: BoxDecoration(
         color: bgColor,
         border: Border.all(color: borderColor, width: 1),
         borderRadius: BorderRadius.only(
-          topLeft: const Radius.circular(16),
-          topRight: const Radius.circular(16),
-          bottomLeft: message.isUser ? const Radius.circular(16) : const Radius.circular(4),
-          bottomRight: message.isUser ? const Radius.circular(4) : const Radius.circular(16),
+          topLeft: const Radius.circular(18),
+          topRight: const Radius.circular(18),
+          // Las burbujas de la IA y comandos comparten la misma forma
+          bottomLeft: isUser ? const Radius.circular(18) : const Radius.circular(4),
+          bottomRight: isUser ? const Radius.circular(4) : const Radius.circular(18),
         ),
       ),
       child: Column(
@@ -116,8 +157,7 @@ class ChatBubble extends StatelessWidget {
       ),
     );
 
-    // Si es del usuario, permitimos gestos para editar (Long Press) y borrar (Doble Tap)
-    if (message.isUser) {
+    if (isUser) {
       bubbleContent = GestureDetector(
         onLongPress: () => _showEditDialog(context),
         onDoubleTap: onDelete,
@@ -125,15 +165,12 @@ class ChatBubble extends StatelessWidget {
       );
     }
 
+    // AHORA TODO FLUYE DE IZQUIERDA A DERECHA, SIN GLOBOS CENTRADOS
     return Align(
-      alignment: isSystemStatus
-          ? Alignment.center // Los estados del sistema los centramos
-          : message.isUser
-          ? Alignment.centerRight
-          : Alignment.centerLeft,
+      alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
       child: ConstrainedBox(
         constraints: BoxConstraints(
-          maxWidth: MediaQuery.of(context).size.width * (isSystemStatus ? 0.9 : 0.85),
+          maxWidth: MediaQuery.of(context).size.width * 0.85,
         ),
         child: bubbleContent,
       ),
@@ -153,12 +190,12 @@ class ChatBubble extends StatelessWidget {
       }
 
       final fencedBlock = message.text.substring(match.start, match.end);
+      widgets.add(const SizedBox(height: 6));
       widgets.add(MarkdownBody(data: fencedBlock, styleSheet: styleSheet));
+      widgets.add(const SizedBox(height: 6));
 
       final codeContent = match.group(1)?.trim() ?? '';
-      // No mostramos botón de ejecutar si es un estado del sistema
       if (codeContent.isNotEmpty && onExecuteCommand != null && !isSystemStatus) {
-        widgets.add(const SizedBox(height: 6));
         widgets.add(_buildExecuteButton(codeContent));
       }
 
@@ -176,19 +213,22 @@ class ChatBubble extends StatelessWidget {
   Widget _buildExecuteButton(String command) {
     return Align(
       alignment: Alignment.centerLeft,
-      child: TextButton.icon(
-        icon: const Icon(Icons.terminal, size: 18, color: AppColors.primary),
-        label: const Text('Ejecutar en Terminal'),
-        style: TextButton.styleFrom(
-          foregroundColor: AppColors.textPrimary,
-          backgroundColor: AppColors.surfaceHighlight,
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
-            side: const BorderSide(color: AppColors.primary),
+      child: Padding(
+        padding: const EdgeInsets.only(top: 4.0),
+        child: TextButton.icon(
+          icon: const Icon(Icons.terminal_rounded, size: 18, color: AppColors.secondary),
+          label: const Text('Ejecutar en Terminal'),
+          style: TextButton.styleFrom(
+            foregroundColor: AppColors.secondary,
+            backgroundColor: AppColors.secondary.withOpacity(0.1),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+              side: BorderSide(color: AppColors.secondary.withOpacity(0.5), width: 1),
+            ),
           ),
+          onPressed: () => onExecuteCommand!(command),
         ),
-        onPressed: () => onExecuteCommand!(command),
       ),
     );
   }

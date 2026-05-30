@@ -1,12 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
-
-import 'package:pro_tocol/model/entities/chat_message.dart';
 import 'package:pro_tocol/view/components/chat_bubble.dart';
 import 'package:pro_tocol/view/theme/AppColors.dart';
 
 import '../../../controller/ChatIaController.dart';
-import '../../components/TypingIndicatorBubble.dart';
 
 class ChatIaTab extends StatefulWidget {
   final ChatIaController controller;
@@ -61,17 +57,20 @@ class _ChatIaTabState extends State<ChatIaTab> {
     if (texto.isEmpty) return;
 
     _textController.clear();
-    widget.controller.enviarMensajeUsuario(texto, onError: (error) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Error en el Agente de IA: $error',
-            style: const TextStyle(color: Colors.white),
-          ),
-          backgroundColor: Colors.redAccent,
-        ),
-      );
-    });
+    widget.controller.enviarMensajeUsuario(
+        texto,
+        onError: (error) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Error en el Agente de IA: $error',
+                style: const TextStyle(color: AppColors.textPrimary),
+              ),
+              backgroundColor: AppColors.error,
+            ),
+          );
+        }
+    );
   }
 
   @override
@@ -79,7 +78,7 @@ class _ChatIaTabState extends State<ChatIaTab> {
     final ctrl = widget.controller;
 
     return Container(
-      color: AppColors.surface,
+      color: AppColors.background, // Cambiado de surface a background para mayor profundidad
       child: Column(
         children: [
           // 1. ÁREA DEL HISTORIAL DE MENSAJES
@@ -88,23 +87,22 @@ class _ChatIaTabState extends State<ChatIaTab> {
                 ? _buildEmptyState()
                 : ListView.builder(
               controller: _scrollController,
-              padding: const EdgeInsets.all(16.0),
+              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
               itemCount: ctrl.mensajes.length + (ctrl.awaitingFirstChunk ? 1 : 0),
               itemBuilder: (context, index) {
-                // Si está esperando el primer fragmento del stream inicial, mostramos el indicador de escritura
                 if (index == ctrl.mensajes.length) {
-                  return const TypingIndicatorBubble();
+                  return const _TypingIndicatorBubble();
                 }
 
                 final msg = ctrl.mensajes[index];
 
                 // Identificamos visualmente si la burbuja actual es un estado del agente en ejecución
-                final isAgentExecuting = msg.text.startsWith("🔍 Ejecutando:") ||
-                    msg.text.startsWith("🧠 Analizando");
+                final isAgentExecuting = msg.text.startsWith("🔍") ||
+                    msg.text.startsWith("🧠") ||
+                    msg.text.startsWith("💻");
 
                 return ChatBubble(
                   message: msg,
-                  // Customizamos el diseño si es un estado interno del agente
                   isSystemStatus: isAgentExecuting,
                   onEditSubmitted: (newText) => ctrl.updateMessageContent(msg.text, newText, index),
                   onDelete: () => ctrl.deleteMessage(msg.text),
@@ -123,17 +121,16 @@ class _ChatIaTabState extends State<ChatIaTab> {
     );
   }
 
-  // Vista que aparece si no hay conversación previa
   Widget _buildEmptyState() {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.auto_awesome, size: 64, color: AppColors.primary.withOpacity(0.5)),
+          Icon(Icons.auto_awesome, size: 64, color: AppColors.primary.withOpacity(0.4)),
           const SizedBox(height: 16),
           const Text(
             '¿En qué puedo ayudarte hoy?',
-            style: TextStyle(color: AppColors.textSecondary, fontSize: 16, fontWeight: FontWeight.bold),
+            style: TextStyle(color: AppColors.textPrimary, fontSize: 16, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 8),
           const Padding(
@@ -141,7 +138,7 @@ class _ChatIaTabState extends State<ChatIaTab> {
             child: Text(
               'Tatiana puede analizar la salud de tu servidor, generar scripts automatizados o inspeccionar configuraciones en tiempo real usando comandos SSH.',
               textAlign: TextAlign.center,
-              style: TextStyle(color: AppColors.textMuted, fontSize: 13),
+              style: TextStyle(color: AppColors.textMuted, fontSize: 13, height: 1.4),
             ),
           ),
         ],
@@ -149,11 +146,10 @@ class _ChatIaTabState extends State<ChatIaTab> {
     );
   }
 
-  // Selector entre Modo Conversación y Modo Script Automático
   Widget _buildModeSelector(ChatIaController ctrl) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      color: AppColors.surfaceHighlight.withOpacity(0.5),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+      color: AppColors.surface,
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
@@ -162,7 +158,7 @@ class _ChatIaTabState extends State<ChatIaTab> {
               Icon(
                 ctrl.isScriptMode ? Icons.code_rounded : Icons.forum_rounded,
                 size: 16,
-                color: ctrl.isScriptMode ? AppColors.background : AppColors.primary,
+                color: ctrl.isScriptMode ? AppColors.secondary : AppColors.primary,
               ),
               const SizedBox(width: 8),
               Text(
@@ -173,10 +169,10 @@ class _ChatIaTabState extends State<ChatIaTab> {
           ),
           Switch(
             value: ctrl.isScriptMode,
-            activeColor: AppColors.background,
-            activeTrackColor: AppColors.background.withOpacity(0.3),
+            activeColor: AppColors.secondary,
+            activeTrackColor: AppColors.secondary.withOpacity(0.2),
             inactiveThumbColor: AppColors.textMuted,
-            // Desactivar el interruptor si la IA está operando
+            inactiveTrackColor: AppColors.surfaceHighlight,
             onChanged: ctrl.isSending ? null : (val) => ctrl.toggleScriptMode(val),
           ),
         ],
@@ -184,56 +180,92 @@ class _ChatIaTabState extends State<ChatIaTab> {
     );
   }
 
-  // Barra de herramientas inferior con el TextField
   Widget _buildInputBar(ChatIaController ctrl) {
     return Container(
-      padding: const EdgeInsets.only(left: 8.0, right: 8.0, bottom: 16.0, top: 8.0),
-      color: AppColors.surfaceHighlight,
+      padding: const EdgeInsets.only(left: 8.0, right: 8.0, bottom: 20.0, top: 10.0),
+      color: AppColors.surface, // Sincronizado con el fondo de la sección de controles
       child: SafeArea(
         top: false,
         child: Row(
           children: [
-            // Botón para borrar el historial de chat (deshabilitado si está enviando)
             IconButton(
               onPressed: ctrl.isSending ? null : ctrl.deleteAllChat,
               icon: const Icon(Icons.delete_outline),
-              color: AppColors.textMuted,
+              color: AppColors.error.withOpacity(0.8),
               tooltip: 'Borrar historial',
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 4),
 
-            // Entrada de texto
             Expanded(
               child: TextField(
                 controller: _textController,
-                enabled: !ctrl.isSending, // Bloquea la entrada si el agente está en medio de una tarea
+                enabled: !ctrl.isSending,
                 decoration: InputDecoration(
                   hintText: ctrl.isScriptMode ? "Dile qué automatizar..." : "Pregúntale a la IA...",
-                  hintStyle: const TextStyle(color: AppColors.textMuted),
+                  hintStyle: const TextStyle(color: AppColors.textMuted, fontSize: 14),
                   filled: true,
-                  fillColor: AppColors.background,
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(30.0), borderSide: BorderSide.none),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                  fillColor: AppColors.surfaceHighlight,
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(24.0), borderSide: BorderSide.none),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 ),
-                style: const TextStyle(color: AppColors.textPrimary),
+                style: const TextStyle(color: AppColors.textPrimary, fontSize: 15),
                 onSubmitted: ctrl.isSending ? null : (_) => _enviarMensaje(),
               ),
             ),
-            const SizedBox(width: 10),
+            const SizedBox(width: 8),
 
-            // Botón de Enviar / Cargando Dinámico
             FloatingActionButton(
               mini: true,
-              backgroundColor: ctrl.isSending ? AppColors.textMuted : AppColors.primary,
+              elevation: 0,
+              backgroundColor: ctrl.isSending ? AppColors.surfaceHighlight : AppColors.primary,
               onPressed: ctrl.isSending ? null : _enviarMensaje,
               child: ctrl.isSending
                   ? const SizedBox(
-                width: 18,
-                height: 18,
-                child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(color: AppColors.primary, strokeWidth: 2),
               )
-                  : const Icon(Icons.send_rounded, color: Colors.white, size: 18),
+                  : const Icon(Icons.send_rounded, color: Colors.white, size: 16),
             )
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TypingIndicatorBubble extends StatelessWidget {
+  const _TypingIndicatorBubble();
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Container(
+        margin: const EdgeInsets.symmetric(vertical: 6.0),
+        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+        decoration: const BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.only(
+            topLeft: Radius.circular(16),
+            topRight: Radius.circular(16),
+            bottomRight: Radius.circular(16),
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: const [
+            Text('Pensando...', style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
+            SizedBox(height: 8),
+            SizedBox(
+              width: 80,
+              child: LinearProgressIndicator(
+                minHeight: 2,
+                backgroundColor: AppColors.surfaceHighlight,
+                valueColor: AlwaysStoppedAnimation(AppColors.secondary),
+              ),
+            ),
           ],
         ),
       ),

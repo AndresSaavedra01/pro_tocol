@@ -5,6 +5,7 @@ class AppColors {
   // Paleta principal
   static const Color primary = Color(0xFF8B63FF);
   static const Color background = Color(0xFF0F1319);
+  static const Color secondary = Color(0xFF03DAC5);
   static const Color surface = Color(0xFF1B2430);
   static const Color surfaceHighlight = Color(0xFF282A36);
 

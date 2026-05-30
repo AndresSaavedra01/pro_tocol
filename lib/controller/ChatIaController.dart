@@ -93,9 +93,9 @@ class ChatIaController extends ChangeNotifier {
 
   Future<void> _handleNormalChat(String prompt, Function(Object)? onError) async {
     // 1. Construimos el historial exclusivo para la API (Independiente de la UI)
-    // SOLUCIÓN: Usar <String, dynamic> para permitir listas anidadas luego
+    // Tipado explícito <String, dynamic> para prevenir el error de Dart
     List<Map<String, dynamic>> apiHistory = mensajes
-        .where((m) => m.text.isNotEmpty)
+        .where((m) => m.text.isNotEmpty && !m.text.startsWith("🔍") && !m.text.startsWith("🧠")) // Filtramos logs temporales
         .map((m) => <String, dynamic>{
       'role': m.isUser ? 'user' : 'assistant',
       'content': m.text
@@ -112,7 +112,7 @@ class ChatIaController extends ChangeNotifier {
 
     int aiIndex = mensajes.length - 1;
 
-    // 2. Preparamos el contexto del servidor (si está conectado)
+    // 2. Preparamos el contexto del servidor
     String? contextoServidor;
     if (activeServer != null) {
       contextoServidor = "IP: ${activeServer!.config.host}, Usuario: ${activeServer!.config.username}, "
@@ -141,7 +141,7 @@ class ChatIaController extends ChangeNotifier {
           break; // Cortamos este stream para actuar inmediatamente
         }
 
-        // TEXTO NORMAL: La IA está hablando / respondiendo
+        // TEXTO NORMAL: La IA está respondiendo
         if (chunk.containsKey('respuesta')) {
           buffer.write(chunk['respuesta']);
           awaitingFirstChunk = false;
@@ -155,7 +155,7 @@ class ChatIaController extends ChangeNotifier {
       // CASO A: SI LA IA PIDIÓ UN COMANDO, LO EJECUTAMOS
       if (isToolCall && commandToRun != null) {
 
-        mensajes[aiIndex] = ChatMessage(text: "🔍 Ejecutando: $commandToRun...", isUser: false);
+        mensajes[aiIndex] = ChatMessage(text: "🔍 Ejecutando...", isUser: false);
         notifyListeners();
 
         String toolResult = "";
@@ -165,14 +165,14 @@ class ChatIaController extends ChangeNotifier {
           if (sshService != null && sshService.isConnected) {
             String cmd = commandToRun!.trim();
 
-            // Interceptamos comandos sudo
+            // Ejecución con soporte para sudo
             if (cmd.startsWith("sudo ")) {
               final password = sshService.config?.password;
               if (password != null && password.isNotEmpty) {
                 final cmdWithoutSudo = cmd.substring(5).trim();
                 toolResult = await sshService.runSudoCommand(cmdWithoutSudo, password);
               } else {
-                toolResult = "Error de permisos: El comando requiere 'sudo', pero no hay una contraseña guardada.";
+                toolResult = "Error de permisos: El comando requiere 'sudo', pero no hay una contraseña guardada para inyectarla.";
               }
             } else {
               toolResult = await sshService.runSingleCommand(cmd);
@@ -207,16 +207,21 @@ class ChatIaController extends ChangeNotifier {
           "content": toolResult
         });
 
-        mensajes[aiIndex] = ChatMessage(text: "🧠 Analizando resultados...", isUser: false);
+        // 🚀 FIJAMOS EL COMANDO EN LA UI Y LO GUARDAMOS EN LA BASE DE DATOS
+        final logComando = "💻 Comando ejecutado:\n```bash\n$commandToRun\n```";
+        mensajes[aiIndex] = ChatMessage(text: logComando, isUser: false);
+        await _saveMessageToDb('assistant', logComando);
+
+        // 🚀 CREAMOS UNA NUEVA BURBUJA EN BLANCO PARA LA RESPUESTA DEL ANÁLISIS
+        mensajes.add(ChatMessage(text: "🧠 Analizando resultados...", isUser: false));
         notifyListeners();
 
-        // Llamada recursiva: Volvemos a enviar todo el historial con el resultado del comando a la IA
-        await _processAgenticStream(aiIndex, apiHistory, contextoServidor, onError);
+        // Llamada recursiva apuntando a la nueva burbuja (mensajes.length - 1)
+        await _processAgenticStream(mensajes.length - 1, apiHistory, contextoServidor, onError);
         return; // Salimos de esta iteración de la pila
 
       } else {
-        // CASO B: EL STREAM TERMINÓ NORMALMENTE (Sin llamadas a comandos)
-        // Esto significa que la IA ya terminó de razonar y esta es su respuesta final de texto.
+        // CASO B: EL STREAM TERMINÓ NORMALMENTE
         if (buffer.isNotEmpty) {
           await _saveMessageToDb('assistant', buffer.toString());
         }
